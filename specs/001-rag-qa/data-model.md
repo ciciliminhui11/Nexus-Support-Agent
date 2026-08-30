@@ -122,9 +122,13 @@ erDiagram
 本特性无长期状态机。仅链路内的瞬时流程状态：
 
 ```text
-请求到达 → 校验通过 → 历史读取 → 向量检索
-                                        ├─ 无命中 → 兜底话术（不调用生成）
-                                        └─ 有命中 → Prompt 组装 → LLM 流式 → 持久化 → 后校验
+请求到达 → 校验通过 → 历史读取 → 混合检索
+   ├─ 向量路：Chroma 余弦 → 阈值过滤（距离 ≤ 1 - threshold）
+   ├─ BM25 路：jieba 分词 → 显著词闸门 → Okapi BM25 打分 → bm25_top_k
+   ├─ RRF 融合（k=60）→ 粗筛候选池 candidate_k=20
+   ├─ Reranker 精排（可选，缺失/失败回落融合序）→ top_k=6
+   ├─ 两路皆空 → 兜底话术（不调用生成）
+   └─ 有命中 → Prompt 组装 → LLM 流式 → 持久化 → 后校验
 ```
 
 配额校验失败 / 长度超限在入口直接拒绝，不进入生成。
@@ -138,3 +142,5 @@ erDiagram
 | 请求携带最近 N 轮（N 可配置）历史 | FR-003 | history.py 读取 |
 | 上下文超长执行截断：丢最早历史、压缩保留知识 | FR-011 | history.py / prompt.py |
 | 回答严格限定检索片段范围，禁止编造 | FR-005/FR-006 | 空检索兜底 + System Prompt 约束 |
+| 混合检索：向量 + BM25 双路召回 + RRF 融合成候选池 | FR-004 | retriever.py（bm25.py 显著词闸门 + Okapi 打分） |
+| Reranker 精排候选池取 top-k，缺失/失败回落融合序 | FR-014 | reranker.py（懒加载 + Noop 降级） |

@@ -4,11 +4,14 @@
 
 本文件记录 Phase 0 中对技术上下文全部 unknowns / 依赖 / 集成的研究结论，格式统一为「决策 / 理由 / 备选方案」。
 
+> **实施状态（2026-08-30 更新）**：§1 混合检索（向量 + BM25 + RRF 融合）与 §3 Reranker 精排已落地实现，见 `backend/app/services/rag/` 下 `bm25.py`、`reranker.py`、`retriever.py`。实现与本节决策的差异见各节「已实施」标注（jieba 仅分词、打分自研 Okapi BM25；Reranker 可插拔懒加载 + Noop 降级）。§4 意图识别、§5 知识冲突检测仍为后续增强，未实现。
+
 ## 1. 检索召回：混合检索（向量 + BM25）与 RRF 融合排序
 
-- **决策**：采用「向量语义检索 + BM25 关键词检索」双路召回，RRF（Reciprocal Rank Fusion）融合排名。Chroma 原生不支持 BM25，笔试 demo 引入轻量 `jieba-bm25` 实现内存稀疏检索。流程：两路分别召回 → RRF 融合排名 → 扩大候选池 → 过滤。粗筛候选规模 `top-k=20`、向量相似度阈值 `0.55`（余弦相似度，初始校准基线，依赖预置测试文档实测校准）；融合后经 Reranker 精排（见 §3）最终取 top-5 送入 LLM 上下文。全部参数通过 `system_config` 表 / `.env` 可配置，不写死。
+- **决策**：采用「向量语义检索 + BM25 关键词检索」双路召回，RRF（Reciprocal Rank Fusion）融合排名。流程：两路分别召回 → RRF 融合排名 → 粗筛候选池 → Reranker 精排。粗筛候选规模 `rag_candidate_k=20`、向量相似度阈值 `rag_similarity_threshold=0.55`（余弦相似度，初始校准基线，依赖预置测试文档实测校准）；融合后经 Reranker 精排（见 §3）最终取 `rag_top_k=6` 送入 LLM 上下文。全部参数通过 `system_config` 表 / `.env` 可配置，不写死。
 - **理由**：纯向量检索对口语化表述与关键词精确匹配（品牌名、型号、货号）召回不足，BM25 关键词路径补齐；RRF 对两路召回做基于排名的融合，不依赖分数尺度对齐，扩大候选池后再过滤，兼顾召回率与精确率。粗筛 top-20 为精排留足候选；阈值 0.55 为初始基线，bge-m3 余弦相似度在 0.5~0.6 区间通常能较好区分相关/不相关。
-- **备选方案**：仅向量检索 → 关键词精确匹配召回差；仅 BM25 → 语义相关但无字面重叠的片段漏召回；不融合只取并集 → 候选池无排序，后续精排/截断无依据。生产环境可切换 ES 等向量+BM25 混合方案，`jieba-bm25` 为笔试 demo 的轻量实现。
+- **备选方案**：仅向量检索 → 关键词精确匹配召回差；仅 BM25 → 语义相关但无字面重叠的片段漏召回；不融合只取并集 → 候选池无排序，后续精排/截断无依据。生产环境可切换 ES 等向量+BM25 混合方案。
+- **已实施（2026-08-30）**：采用 **jieba 仅作分词**、**打分自研 Okapi BM25**（k1=1.5、b=0.75，`bm25.py`），不引入 `jieba-bm25` 第三方打分包（宪法「核心链路自研可读」）；新增**显著词闸门**：候选片段须与问题共享 ≥1 个显著词（CJK 二元及以上 / ASCII 词 len≥2）才进入打分，防止「今天的天气怎么样」因共享功能字（的/天/么）假阳性命中无关文档、破坏空检索兜底语义。BM25 单路召回上限 `rag_bm25_top_k=20`；RRF 常数 `rag_rrf_k=60`（`RRF(doc)=Σ 1/(k+rank)`）。
 
 ## 2. Embedding：bge-m3 与 Chroma 集成
 
@@ -18,9 +21,10 @@
 
 ## 3. 检索重排序：Reranker 精排（粗筛 → 精排）
 
-- **决策**：增加 Reranker 重排序链路——向量 + BM25 先粗筛取 top-20 候选，使用本地 `bge-reranker-v2-m3` 做 Cross-Encoder 精排，最终取 top-5 送入 LLM 上下文。降级策略：reranker 模型加载失败时自动回退到原始向量/融合排序，保证服务不挂。
+- **决策**：增加 Reranker 重排序链路——向量 + BM25 先粗筛取 `rag_candidate_k=20` 候选，使用本地 `bge-reranker-v2-m3` 做 Cross-Encoder 精排，最终取 `rag_top_k=6` 送入 LLM 上下文。降级策略：reranker 模型加载失败时自动回退到 RRF 融合排序，保证服务不挂。
 - **理由**：解决经典问题——语义相似但业务不同的片段被高分召回（例如「退款时效」vs「配送时效」）；Cross-Encoder 精排把业务无关的片段压到末尾，提高送入 LLM 上下文的质量，降低注意力稀释与幻觉。本地开源模型符合沙箱可运行；降级策略保证 reranker 异常不影响主链路可用性。
 - **备选方案**：无精排直接取 top-k → 高分但业务无关片段混入上下文；用 LLM 二次精排 → 增加一次调用延迟与成本；在线 reranker API → 依赖外部服务与密钥，违背本地沙箱要求。
+- **已实施（2026-08-30）**：`reranker.py` 提供 `Reranker` 协议（`rerank(query, texts) -> list[float]`）+ `CrossEncoderReranker`（sentence-transformers `CrossEncoder`，**懒加载**：构造不导入，首次 `rerank` 才 `import`）+ `NoopReranker` 降级。`get_reranker()` 进程级缓存：`rag_reranker_enabled=False` 或 `importlib.util.find_spec("sentence_transformers") is None` → Noop；应用启动 `warmup()` 预热（best-effort，失败置 Noop）。`retriever` 对精排异常 try/except 回落 RRF 融合序。**模型未安装不影响主链路**（集成测试用注入假精排器验证重排效果）。
 
 ## 4. Query 构造优化（意图识别）
 
@@ -69,8 +73,9 @@
 
 ## 9. 首字延迟控制（SC-001 ≤3s）
 
-- **决策**：链路按「校验→历史读取→Query 构造→向量化→检索（混合粗筛）→Reranker 精排→冲突过滤→Prompt 组装→LLM 流式连接」顺序串行但每步均为异步；检索与 Prompt 组装在 LLM 连接前完成；LLM 流式首 chunk 一到即经 SSE 转发；Embedding 模型、reranker 模型与向量 collection 进程级预热（应用启动时加载），避免请求内冷启动。
-- **理由**：首字延迟 = 校验 + 历史 + 向量化 + 检索 + 精排 + 连接 + 首 token，在本地 Ollama 场景主要开销在模型连接与首 token；预热与异步避免阻塞叠加，可满足 3 秒目标。Reranker 增加的精排耗时通过预热与粗筛 top-20 上限控制，避免拖慢首字。
+- **决策**：链路按「校验→历史读取→Query 构造→向量化→检索（混合粗筛：向量阈值 + BM25 闸门 → RRF 融合）→Reranker 精排（可选）→Prompt 组装→LLM 流式连接」顺序串行但每步均为异步；检索与 Prompt 组装在 LLM 连接前完成；LLM 流式首 chunk 一到即经 SSE 转发；Embedding 模型、reranker 模型与向量 collection 进程级预热（应用启动时加载），避免请求内冷启动。
+- **理由**：首字延迟 = 校验 + 历史 + 向量化 + 检索 + 精排 + 连接 + 首 token，在本地 Ollama 场景主要开销在模型连接与首 token；预热与异步避免阻塞叠加，可满足 3 秒目标。Reranker 增加的精排耗时通过预热与粗筛 `rag_candidate_k=20` 上限控制（精排只对 20 条候选打分，而非全库），避免拖慢首字。
+- **已实施（2026-08-30）**：`main.py` lifespan 内 best-effort 调 `reranker.warmup()`（try/except，失败置 Noop）；BM25 路召回上限 `rag_bm25_top_k=20` 控制建索引与打分规模（切分全量就绪切片，仅对 top-20 打分排序）。
 - **备选方案**：同步加载模型每次请求内加载 → 冷启动数十秒，不可接受；检索与向量化流水线并行化 → 单 Query 场景收益有限，先保简单正确。
 
 ## 10. 每日配额计数的一致性（并发安全）
@@ -87,6 +92,6 @@
 
 ## 12. 测试策略
 
-- **决策**：pytest；单元测试覆盖校验/截断/Prompt/SSE 封装；集成测试用真实 Chroma（临时目录）+ 内存 SQLite 模拟 MySQL + mock Ollama 服务，覆盖完整链路（正常流式、空检索兜底、超时/429、上下文超长、Reranker 降级回退）。
-- **理由**：宪法要求「关键链路集成测试（必须）」与工程问题实测覆盖；mock LLM 使超时/429 可确定复现；reranker 加载失败注入可验证降级回退路径。
+- **决策**：pytest；单元测试覆盖校验/截断/Prompt/SSE 封装，混合检索新增 `test_bm25.py`（分词/显著词闸门/打分排序/jieba 缺失降级）、`test_reranker.py`（Noop 保序/可插拔决议/懒加载/降级）、`test_rrf.py`（RRF 融合纯函数）、`test_retriever_hybrid.py`（双路召回/阈值过滤/融合/精排/异常回落）；集成测试用真实 Chroma（临时目录）+ 内存 SQLite 模拟 MySQL + mock Ollama 服务，覆盖完整链路（正常流式、空检索兜底、超时/429、上下文超长、Reranker 降级回退、BM25 关键词命中、FakeReranker 重排 meta 顺序）。
+- **理由**：宪法要求「关键链路集成测试（必须）」与工程问题实测覆盖；mock LLM 使超时/429 可确定复现；reranker 加载失败注入可验证降级回退路径；伪 embedding 无法表达语义相关但字面不重叠 → BM25 命中用「文档逐字包含关键词短语」构造，FakeReranker 注入验证精排覆盖融合序。
 - **备选方案**：纯 mock 全链路 → 无法验证真实向量检索行为；直接连真实 Ollama → CI 依赖外部进程、不稳定。

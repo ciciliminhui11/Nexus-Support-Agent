@@ -11,6 +11,7 @@
 - Chroma 向量库已就绪；Embedding 模型（bge-m3）与 LLM（Ollama Qwen2）本地可用
 - 知识库存在至少一条**就绪**文档（上传/解析由 002 特性提供，可用预置测试数据 `docs/faq.md`）
 - 存在有效会话（创建会话由 004 特性提供；可用 SQL 预置一条会话记录）
+- **（可选）Reranker 精排模型**（sentence-transformers + `bge-reranker-v2-m3`，按 重难点总结 第五部分镜像安装教程 安装）。未安装时自动回退 RRF 融合排序，不影响主链路，仅 `meta` 引用顺序为融合序。
 
 ## 验证场景
 
@@ -55,6 +56,23 @@ curl -N -X POST ... -d '{"session_id": 1001, "question": "那它收费吗？"}'
 - 将 `context_turns` 调大并填充长历史，或放大知识片段，使历史+知识总长超过 `context_max_tokens`
 - 提问后验证：回答仍基于知识片段给出（未丢失关键知识），最早历史被丢弃，无报错
 
+### 场景 5：混合检索 + 精排（验收场景 4、5）
+
+```bash
+# 关键词精确匹配：问句与知识片段无语义重叠但共享关键词（口语化/型号/货号）
+curl -N -X POST http://localhost:8000/api/chat/stream \
+  -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" \
+  -d '{"session_id": 1001, "question": "退货政策如何办理"}'
+```
+
+**预期（BM25 关键词召回）**：即使向量路被阈值滤掉，`meta` 仍有来源（jieba 显著词闸门命中），回答基于知识片段。
+
+```bash
+# 重排验证：知识库同时存在「退货政策」与「配送时效」文档，问「退货政策与配送时效」
+```
+
+**预期（Reranker 精排，已装模型时）**：`meta` 来源按精排相关性排序，业务无关片段被压后；未装模型时回落融合序，链路正常（可在日志看到一次降级 warning）。
+
 ## 测试命令
 
 ```bash
@@ -62,7 +80,7 @@ cd backend
 pytest tests/ -v
 ```
 
-**预期**：全部通过。其中集成测试覆盖正常流式、空检索兜底、超时/429、上下文超长、并发配额一致性与持久化。
+**预期**：全部通过。其中集成测试覆盖正常流式、空检索兜底、超时/429、上下文超长、并发配额一致性与持久化；混合检索相关单元测试覆盖 jieba 分词/显著词闸门、RRF 融合、Reranker 降级；集成测试新增 BM25 关键词命中（`test_hybrid_bm25_only_keyword_hit`）与 FakeReranker 重排 meta 顺序（`test_fake_reranker_reorders_meta_sources`）。注意：测试环境未装 sentence-transformers，Reranker 走 Noop 降级路径（由注入假精排器的用例单独验证精排行为）。
 
 ## 关键契约引用
 

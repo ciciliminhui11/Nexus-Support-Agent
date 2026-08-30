@@ -8,7 +8,7 @@
 
 ## 摘要
 
-本特性实现 RAG 智能问答的核心闭环：输入校验（≤500 字 + 每日 100 次配额）→ 读取会话最近 N 轮历史 → Query 向量化 → 向量检索（相似度阈值过滤 + top-k 召回）→ 无命中走固定兜底话术（禁止编造）→ Prompt 组装（System Prompt + 带编号来源的知识片段 + 历史 + 问题）→ LLM 流式调用 → SSE 以 `data`/`meta`/`finish`/`error` 事件流式返回（token + 引用来源 + 结束 + 错误）→ 会话消息持久化 → 输出后来源校验。
+本特性实现 RAG 智能问答的核心闭环：输入校验（≤500 字 + 每日 100 次配额）→ 读取会话最近 N 轮历史 → Query 向量化 → 混合检索（向量路[Chroma 余弦 + 阈值过滤] + BM25 路[jieba 分词 + 自研 Okapi BM25 + 显著词闸门] 双路召回 → RRF 融合排序 → 粗筛候选池 `rag_candidate_k` → Reranker 精排取 `rag_top_k`[可选，缺失/失败回退融合序]）→ 无命中走固定兜底话术（禁止编造）→ Prompt 组装（System Prompt + 带编号来源的知识片段 + 历史 + 问题）→ LLM 流式调用 → SSE 以 `data`/`meta`/`finish`/`error` 事件流式返回（token + 引用来源 + 结束 + 错误）→ 会话消息持久化 → 输出后来源校验。
 
 技术方案遵循宪法与初步方案：Python 3.11 + FastAPI，SQLAlchemy + MySQL 8.0 存元数据，Chroma 存向量，bge-m3 本地 Embedding，Ollama Qwen2 提供 LLM。RAG 核心链路（切分/向量化/检索/Prompt 组装/SSE 封装）全部自研可读，不引入黑盒 LangChain 链。LLM 超时 / 429 限流以 SSE `error` 事件友好返回。
 
@@ -16,7 +16,7 @@
 
 **语言/版本**：Python 3.11（FastAPI + uvicorn）
 
-**主要依赖**：fastapi、uvicorn、sqlalchemy、pymysql、chromadb、sentence-transformers（bge-m3）、httpx（调用 Ollama 兼容接口）、pydantic-settings、python-dotenv、pytest
+**主要依赖**：fastapi、uvicorn、sqlalchemy、pymysql、chromadb、sentence-transformers（bge-m3 Embedding）、jieba（BM25 中文分词，打分自研 Okapi BM25）、httpx（调用 Ollama 兼容接口）、pydantic-settings、python-dotenv、pytest；Reranker 精排（sentence-transformers CrossEncoder + bge-reranker-v2-m3）为**可选依赖**，未安装自动降级
 
 **存储**：MySQL 8.0（会话/消息/每日配额等业务元数据）+ Chroma 本地文件向量库（切片向量，metadata 关联 doc_id）
 
@@ -30,7 +30,7 @@
 
 **约束**：单条提问 ≤500 字；每日配额默认 100 次/用户/天（可配置）；SSE 流式输出禁止整段返回；上下文超长执行截断策略；LLM 超时/限流以错误事件返回（≤5 秒内收到明确错误）；所有 API 密钥走环境变量，禁止硬编码
 
-**规模/范围**：单机沙箱可运行（MySQL + Chroma + Ollama 本地模型）；生产组件切换留迁移方案；意图识别、追问建议、重排序等加分项不在本特性范围
+**规模/范围**：单机沙箱可运行（MySQL + Chroma + Ollama 本地模型）；生产组件切换留迁移方案；混合检索（向量 + BM25 + RRF 融合）与 Reranker 精排在本特性范围内（Reranker 依赖模型安装，缺失自动降级）；意图识别、追问建议、知识冲突检测等为后续增强，不在本特性范围
 
 ## 宪法核验
 
@@ -38,7 +38,7 @@
 
 | 宪法原则 | 本特性落点 | 状态 |
 |---|---|---|
-| 原则一：RAG 核心链路可读可控 | 切分、Embedding、检索、Prompt 组装、SSE 封装全部自研模块化，不引入黑盒 LangChain 链；每层可解释可调优 | ✅ 通过 |
+| 原则一：RAG 核心链路可读可控 | 切分、Embedding、检索、Prompt 组装、SSE 封装全部自研模块化，不引入黑盒 LangChain 链；BM25 打分自研 Okapi BM25（jieba 仅提供分词）、RRF 融合自研、Reranker 可插拔抽象（懒加载 + Noop 降级），每层可解释可调优 | ✅ 通过 |
 | 原则二：禁止编造与幻觉抑制 | FR-005 空检索固定兜底话术；FR-006 System Prompt 强约束；FR-008 `meta` 事件携带引用来源（文档名+片段摘要）；FR-013 输出后来源校验，检出超范围标记提示 | ✅ 通过 |
 | 原则三：AI 能力仅在服务端执行 | 检索与 LLM 调用全部后端完成，前端仅通过 REST/SSE 交互 | ✅ 通过 |
 | 原则四：流式输出与耗时任务异步化 | FR-007 SSE 逐块返回；FR-009 统一事件协议 `data`/`meta`/`finish`/`error`（文档解析异步属 002 特性） | ✅ 通过 |
@@ -91,7 +91,9 @@ backend/
 │   │   └── rag/
 │   │       ├── __init__.py
 │   │       ├── embedding.py # bge-m3 向量化封装（Query）
-│   │       ├── retriever.py # Chroma 检索：阈值过滤 + top-k 召回
+│   │       ├── bm25.py      # jieba 分词 + 自研 Okapi BM25 + 显著词闸门
+│   │       ├── reranker.py  # Reranker 抽象：CrossEncoder（懒加载）+ Noop 降级
+│   │       ├── retriever.py # 混合检索：向量[阈值] + BM25 → RRF 融合 → 精排 → top-k
 │   │       ├── prompt.py    # System Prompt + 知识片段编号 + 历史组装 + 截断
 │   │       ├── llm.py       # Ollama 流式调用、超时/429 异常捕获
 │   │       ├── sse.py       # data/meta/finish/error 事件封装
@@ -107,13 +109,17 @@ backend/
     │   ├── test_validation.py
     │   ├── test_history_truncation.py
     │   ├── test_prompt.py
-    │   └── test_sse_events.py
+    │   ├── test_sse_events.py
+    │   ├── test_bm25.py          # 分词/显著词闸门/打分排序/jieba 降级
+    │   ├── test_reranker.py      # Noop 保序/可插拔决议/懒加载/降级
+    │   ├── test_rrf.py           # RRF 融合纯函数
+    │   └── test_retriever_hybrid.py  # 混合检索管线（双路/融合/精排/回落）
     └── integration/
         ├── __init__.py
         └── test_rag_chat_flow.py   # 完整链路：问答→流→引用→持久化→兜底→异常
 ```
 
-**结构决策**：采用后端单项目结构（`backend/app` 模块化），RAG 链路按职责拆分为 `services/rag/` 子模块（embedding / retriever / prompt / llm / sse / postcheck），满足宪法「核心链路自研可读、每层可解释」要求，便于单层调优与独立测试。向量库访问统一收敛到 `vector_store/`，隔离 Chroma 细节、便于后续切换生产向量库。
+**结构决策**：采用后端单项目结构（`backend/app` 模块化），RAG 链路按职责拆分为 `services/rag/` 子模块（embedding / bm25 / reranker / retriever / prompt / llm / sse / postcheck），满足宪法「核心链路自研可读、每层可解释」要求，便于单层调优与独立测试。BM25 打分（Okapi）与 RRF 融合在 `bm25.py` / `retriever.py` 内自研，jieba 仅提供分词；Reranker 走可插拔抽象（`reranker.py`），不引入固定重模型依赖。向量库访问统一收敛到 `vector_store/`，隔离 Chroma 细节、便于后续切换生产向量库。
 
 ## 复杂度跟踪
 

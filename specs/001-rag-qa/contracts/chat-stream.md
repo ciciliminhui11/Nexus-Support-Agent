@@ -85,8 +85,17 @@ data: {"message_id":124,"postcheck":{"status":"ok"}}
 |---|---|---|---|
 | 每日配额上限 | `daily_quota_limit` | 100 | FR-002 |
 | 上下文轮数 N | `context_turns` | 6 | FR-003 |
-| 检索 top-k | `rag_top_k` | 6 | FR-004 |
-| 相似度阈值 | `rag_similarity_threshold` | 0.55 | FR-004 |
+| 检索 top-k（精排后送入 LLM 数） | `rag_top_k` | 6 | FR-004/FR-014 |
+| 相似度阈值 | `rag_similarity_threshold` | 0.55 | FR-004 向量路过滤（Chroma 距离按 `1 - 相似度` 换算） |
+| 粗筛候选池规模 | `rag_candidate_k` | 20 | FR-004/FR-014 RRF 融合后、精排前候选数 |
+| BM25 单路召回上限 | `rag_bm25_top_k` | 20 | FR-004 |
+| RRF 融合常数 k | `rag_rrf_k` | 60 | FR-004 `Σ 1/(k+rank)` |
+| Reranker 精排开关 | `rag_reranker_enabled` | true | FR-014；false 时回落融合序 |
+| Reranker 模型名 | `rag_reranker_model` | `BAAI/bge-reranker-v2-m3` | FR-014 sentence-transformers CrossEncoder |
 | 上下文 token 上限 | `context_max_tokens` | 6000 | FR-011 截断阈值 |
 | LLM 超时（秒） | `llm_timeout_seconds` | 60 | FR-010 |
 | LLM 首 token 等待（秒） | `llm_first_token_timeout` | 30 | SC-001/SC-005 |
+
+**检索链路说明（FR-004/FR-014）**：Query 向量化后两路召回 —— 向量路按 `rag_similarity_threshold` 阈值过滤，BM25 路经显著词闸门 + Okapi 打分按 `rag_bm25_top_k` 召回；两路经 RRF（`rag_rrf_k`）融合取 `rag_candidate_k` 候选池，Reranker 精排（`rag_reranker_model`，未装/失败回落融合序）后取 `rag_top_k` 送 LLM。两路皆空 → 走空检索兜底（见下）。
+
+**生效方式说明**：除 `rag_reranker_enabled` / `rag_reranker_model` 外，上表检索参数均支持 `system_config` 表热调（`get_config_value` 读表优先、回落 Settings 默认值）；两个 Reranker 键在进程级 `get_reranker()` 缓存，以 `.env` 启动时生效，改动需重启。
