@@ -1,0 +1,8 @@
+{
+  "name": "nexus-support-agent-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI 智能客服系统前端（骨架阶段，待补充）",
+  "scripts": {},
+  "dependencies": {}
+}
