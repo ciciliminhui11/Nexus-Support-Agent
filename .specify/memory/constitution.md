@@ -94,7 +94,7 @@ Prompt 组装、大模型调用、SSE 流式回答、答案来源引用、用户
   完整 RAG 问答链路、SSE 事件协议、文档删除级联。
 - **工程问题必须实测覆盖**：检索为空、上下文超长截断、
   LLM 超时 / API 限流（429）异常捕获、幻觉后校验。
-- 本地方案以 MySQL 8.0 + Chroma + bge-m3 + Ollama Qwen2 可沙箱运行；
+- 本地方案以 MySQL 8.0 + Chroma + bge-m3（Embedding，Ollama 提供）+ DeepSeek V4 Flash（LLM，OpenAI 兼容 API）可沙箱运行；
   切换生产组件（对象存储、向量库、LLM 服务）必须提供迁移方案。
 - 项目提交文档必须包含：技术选型理由、RAG 架构图、
   工程问题处理说明、AI 编程工具使用说明。
