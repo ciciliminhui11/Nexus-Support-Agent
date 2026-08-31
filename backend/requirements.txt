@@ -1,4 +1,4 @@
-# 后端依赖（骨架阶段：核心依赖初稿，版本号与最终清单待编码时确定）
+# 后端依赖（Python 3.14 实测兼容清单，2026-08-30）
 # 规划技术选型参考：../初步设计方案.txt
 
 # Web
@@ -11,6 +11,10 @@ sqlalchemy
 pymysql
 cryptography            # MySQL 8 认证插件需要
 
+# 配置
+python-dotenv
+pydantic-settings
+
 # 向量库 / Embedding
 chromadb
 jieba                   # 中文分词，BM25 关键词召回（001 混合检索；打分自研 Okapi BM25）
@@ -18,19 +22,22 @@ jieba                   # 中文分词，BM25 关键词召回（001 混合检索
 # sentence-transformers
 # torch
 
-# 配置
-python-dotenv
-
 # 文档解析
 pypdf                   # pdf 解析（可选）
 python-docx
 
 # 鉴权
 pyjwt
+bcrypt                  # 密码哈希（passlib 与 bcrypt≥4.1 不兼容，直接用 bcrypt，见重难点总结 §1）
 
-# LLM 调用（OpenAI 兼容协议，可对接 Ollama / 通义千问 / Groq）
-openai
+# 意图识别（006）：关键词多模式串匹配
+pyahocorasick           # ahocorasick-ng 无 3.14/Windows 轮子，改用同 API 的上游包 2.3.1（见 docs/安装教程.md §1）
+# 006 实现时另需：pyparsing（句式模板）、pyyaml（词库/模板/负样本配置）
 
-# 异步任务（文档量大时启用）
+# LLM 调用（OpenAI 兼容协议，httpx 直连；可对接 Ollama / DeepSeek / 通义千问）
+httpx
+
+# 异步任务（002：002 已改为 FastAPI BackgroundTasks 进程内执行，见 specs/002-knowledge-base/research.md §1）
+# 以下 celery/redis 当前不再必需，仅未来扩展回跨进程 worker 时才需要，故注释保留。
 # celery
 # redis

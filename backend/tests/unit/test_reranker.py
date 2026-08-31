@@ -71,11 +71,21 @@ def test_crossencoder_lazy_load_uses_fake_module(monkeypatch):
 
 
 def test_crossencoder_construction_does_not_import(monkeypatch):
-    """构造 CrossEncoderReranker 不应触发 sentence_transformers 导入。"""
+    """构造 CrossEncoderReranker 不应触发 sentence_transformers 导入。
+
+    用差分断言而非 `not in sys.modules`：即使 lifespan 预热等场景已先导入过
+    sentence_transformers（真实环境已安装时会发生），仍精确验证「构造」本身
+    不新增任何 ST 模块（懒加载只在 _load()/rerank() 时发生）。
+    """
     _patch_find_spec(monkeypatch, present=True)
-    assert "sentence_transformers" not in sys.modules
+    before = set(sys.modules)
     reranker.CrossEncoderReranker("fake-model")
-    assert "sentence_transformers" not in sys.modules
+    newly_imported = {
+        m
+        for m in set(sys.modules) - before
+        if m == "sentence_transformers" or m.startswith("sentence_transformers.")
+    }
+    assert newly_imported == set()
 
 
 def test_warmup_failure_sets_noop(monkeypatch):

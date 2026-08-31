@@ -1,6 +1,9 @@
 """反馈 upsert：同一 (message_id, user_id) 覆盖更新，以最后一次为准（FR-006）。"""
 from __future__ import annotations
 
+import pytest
+
+from app.core.exceptions import NotFoundError
 from app.db.models import Feedback, Message
 from app.schemas.feedback import FeedbackSubmitRequest
 from app.services.feedback import submit as fb
@@ -43,7 +46,8 @@ def test_upsert_updates_last_wins(db, make_user):
     assert len(rows) == 1
 
 
-def test_upsert_different_users_separate_rows(db, make_user):
+def test_upsert_cross_user_rejected(db, make_user):
+    """越权反馈：他人会话中的消息 MUST 被拒绝（FR-009 / SC-006）。"""
     user1 = make_user(identifier="13800138000")
     user2 = make_user(identifier="13900139000")
     sess = create_session(db, user1.id)
@@ -54,9 +58,13 @@ def test_upsert_different_users_separate_rows(db, make_user):
 
     fb.submit_feedback(db, msg.id, user1.id,
                        FeedbackSubmitRequest(feedback_type="like"))
-    fb.submit_feedback(db, msg.id, user2.id,
-                       FeedbackSubmitRequest(feedback_type="dislike"))
 
+    with pytest.raises(NotFoundError) as exc:
+        fb.submit_feedback(db, msg.id, user2.id,
+                           FeedbackSubmitRequest(feedback_type="dislike"))
+    assert exc.value.code == "message_not_found"
+
+    # 他人反馈未写入，仅保留本人那条
     rows = db.query(Feedback).filter(Feedback.message_id == msg.id).all()
-    assert len(rows) == 2
-    assert {r.user_id for r in rows} == {user1.id, user2.id}
+    assert len(rows) == 1
+    assert rows[0].user_id == user1.id

@@ -80,7 +80,7 @@ async def _stream_deepseek(messages: list[dict]) -> AsyncGenerator[str, None]:
     base = settings.deepseek_base_url.rstrip("/") or "https://api.deepseek.com"
     url = f"{base}/chat/completions"
     payload = {
-        "model": settings.deepseek_small_model,
+        "model": settings.deepseek_chat_model,
         "messages": messages,
         "stream": True,
     }

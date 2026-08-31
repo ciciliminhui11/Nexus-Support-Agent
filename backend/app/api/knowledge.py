@@ -51,6 +51,8 @@ def upload_document(
     db.commit()
     db.refresh(doc)
 
+    # FastAPI BackgroundTasks 进程内异步入库（免 Redis/Celery，见 research §1）。
+    # HTTP 先返回 202；任务在 Web 进程同事件循环内后台执行，测试由 TestClient 同步执行。
     run_in_background(background_tasks, pipeline.process_document, doc.id)
     return UploadResponse(
         doc_id=doc.id,

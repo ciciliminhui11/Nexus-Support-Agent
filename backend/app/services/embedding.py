@@ -7,10 +7,15 @@
 """
 from __future__ import annotations
 
+import time
+
 import httpx
 
 from app.config import settings
 from app.core.exceptions import LLMError
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class EmbeddingClient:
@@ -68,13 +73,38 @@ def get_embedding_client() -> EmbeddingClient:
     return OllamaEmbeddingClient(settings.ollama_base_url, settings.ollama_embed_model)
 
 
+def _embed_batch_with_retry(client: EmbeddingClient, batch: list[str]) -> list[list[float]]:
+    """单个批次向量化 + 有限重试（处理瞬时网络超时）。
+
+    仅对 Embedding 服务不可用（LLMError，如网络超时/连接中断）做有限次重试，
+    退避随重试次数线性增长；重试耗尽仍失败则上抛，由上层（FR-011 回滚）处理。
+    """
+    attempts = 0
+    while True:
+        try:
+            return client.embed(batch)
+        except LLMError as exc:
+            attempts += 1
+            if attempts >= settings.embedding_retry_times:
+                raise
+            delay = settings.embedding_retry_backoff_seconds * attempts
+            logger.warning(
+                "Embedding 批次失败，%s/%s 次后重试（%.1fs 后）: %s",
+                attempts,
+                settings.embedding_retry_times,
+                delay,
+                exc,
+            )
+            time.sleep(delay)
+
+
 def embed_texts(
     client: EmbeddingClient, texts: list[str], batch_size: int = 16
 ) -> list[list[float]]:
-    """分批向量化，避免单次请求过大。"""
+    """分批向量化，避免单次请求过大；每批带有限重试。"""
     if not texts:
         return []
     results: list[list[float]] = []
     for i in range(0, len(texts), max(batch_size, 1)):
-        results.extend(client.embed(texts[i : i + batch_size]))
+        results.extend(_embed_batch_with_retry(client, texts[i : i + batch_size]))
     return results

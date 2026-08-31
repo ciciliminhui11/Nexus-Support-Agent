@@ -15,6 +15,8 @@ os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests-0123456789abcdef
 os.environ.setdefault("DAILY_QUOTA_LIMIT", "100")
 # Chroma 用临时内存库（EphemeralClient），不落磁盘
 os.environ.setdefault("CHROMA_DIR", "")
+# 002 后台任务已改为 FastAPI BackgroundTasks 进程内执行（免 Celery/Redis）。
+# TestClient 在响应后同步执行 BackgroundTasks，测试无需额外配置。
 
 import pytest
 from fastapi.testclient import TestClient
@@ -105,8 +107,14 @@ def db():
 
 
 @pytest.fixture()
-def client(db):
+def client(db, monkeypatch):
+    from app.config import settings
     from app.main import app
+
+    # 测试不加载真实 CrossEncoder 模型：1) 避免 lifespan warmup 在每条集成用例加载/导入
+    # sentence-transformers（慢且污染 sys.modules）；2) 需要精排行为的用例直接
+    # monkeypatch retriever.get_reranker（如 test_rag_chat_flow）。
+    monkeypatch.setattr(settings, "rag_reranker_enabled", False)
 
     with TestClient(app) as c:
         yield c

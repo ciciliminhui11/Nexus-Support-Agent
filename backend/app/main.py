@@ -1,6 +1,7 @@
 """FastAPI 应用装配：中间件、全局异常处理、路由注册、启动初始化。"""
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -49,6 +50,23 @@ def seed_admin() -> None:
         db.close()
 
 
+def sweep_zombie_tasks() -> None:
+    """启动时清扫僵尸解析任务（SC-004 双层兜底 · 第 1 层）。
+
+    进程崩溃 / OOM 时 except 分支不会执行，文档可能永久停留在「处理中」。
+    启动（新解释器）时把超过 `parse_timeout_seconds` 的「处理中」任务/文档置失败；
+    单进程 dev 场景下重启即意味前一解释器已死，遗留「处理中」必然是僵尸。
+    """
+    try:
+        from app.services.knowledge.pipeline import mark_stale_processing_timeout
+
+        cleaned = mark_stale_processing_timeout()
+        if cleaned:
+            logger.warning("启动清扫僵尸解析任务 %s 个", cleaned)
+    except Exception as exc:  # noqa: BLE001  清扫失败不应阻断启动
+        logger.exception("启动清扫僵尸任务异常（忽略）: %s", exc)
+
+
 def warmup_reranker() -> None:
     """启动预热 Reranker 精排模型（best-effort，research §9 进程级预热）。
 
@@ -63,13 +81,49 @@ def warmup_reranker() -> None:
         logger.exception("Reranker 预热异常（忽略）: %s", exc)
 
 
+async def _runtime_zombie_sweeper_task(stop: asyncio.Event) -> None:
+    """运行期周期性清扫（SC-004 双层兜底 · 第 2 层）。
+
+    进程在 lifespan 启动后长期存活期间，若某次后台任务崩溃 / 卡死（未走 except
+    分支），文档可能停留「处理中」。本循环每 `parse_timeout_seconds` 秒调一次
+    `mark_stale_processing_timeout()` 收敛；随应用启动/停止，无需 celery-beat/
+    APScheduler/外部常驻进程（见 specs/002-knowledge-base/research.md §1）。
+
+    注意：BackgroundTasks 为进程内执行，本循环是与它们共享同一事件循环的异步
+    协程，不会并发写死；清扫本身自开 SessionLocal，与请求会话解耦。
+    """
+    from app.services.knowledge.pipeline import mark_stale_processing_timeout
+
+    while not stop.is_set():
+        try:
+            cleaned = mark_stale_processing_timeout()
+            if cleaned:
+                logger.warning("运行期清扫僵尸解析任务 %s 个", cleaned)
+        except Exception as exc:  # noqa: BLE001  清扫失败不应中断循环
+            logger.exception("运行期清扫僵尸任务异常（下次继续）: %s", exc)
+        try:
+            await asyncio.sleep(settings.parse_timeout_seconds)
+        except asyncio.CancelledError:
+            break  # 应用关闭触发取消，正常退出循环
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
     seed_admin()
     warmup_reranker()
-    logger.info("应用启动完成")
+    sweep_zombie_tasks()
+    stop = asyncio.Event()
+    sweeper = asyncio.create_task(_runtime_zombie_sweeper_task(stop))
+    logger.info("应用启动完成（运行期僵尸清扫循环已启动）")
     yield
+    # 应用关闭：停止运行期清扫协程，避免残留未取消协程告警
+    stop.set()
+    sweeper.cancel()
+    try:
+        await sweeper
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(

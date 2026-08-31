@@ -70,10 +70,19 @@ def add_chunks(doc_id: int, records: list[dict]) -> None:
     )
 
 
-def delete_by_doc_id(doc_id: int) -> None:
+def delete_by_doc_id(doc_id: int, raise_on_error: bool = False) -> None:
+    """按 doc_id 删除全部切片（整份失败回滚 / 级联删除用）。
+
+    - `raise_on_error=False`（默认）：吞掉异常（无匹配元数据时 Chroma 可能抛空
+      where 错误），供普通清理路径使用；
+    - `raise_on_error=True`：异常上抛，供 FR-011 回滚路径「再次捕获删除异常并告警」
+      使用（删除失败意味着向量残留，必须让上层感知）。
+    """
     try:
         get_collection().delete(where={"doc_id": doc_id})
     except Exception:
+        if raise_on_error:
+            raise
         # 无匹配元数据时 Chroma 可能抛空 where 错误，忽略即可
         pass
 

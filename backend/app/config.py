@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     chunk_overlap: int = 80
     parse_timeout_seconds: int = 600
     embedding_batch_size: int = 16
+    embedding_retry_times: int = 2  # Embedding 批次失败后的有限重试次数（瞬时网络超时兜底）
+    embedding_retry_backoff_seconds: float = 0.5  # 线性退避基数（第 n 次重试 sleep 基数×n）
     upload_dir: str = "./storage/uploaded"  # 原始文件存储目录（生产可换对象存储）
 
     # ---------- 001 RAG 问答 ----------
@@ -76,18 +78,22 @@ class Settings(BaseSettings):
     intent_clarify_retry: int = 1
     intent_reverse_calibrate: bool = True
     intent_model_self_check: bool = False
+    # DeepSeek API 密钥/Base URL 为 001 与 006 共用（同一厂商）。模型分开：
+    # 001 对话用 deepseek_chat_model；006 意图识别用 deepseek_small/large_model。
     deepseek_api_key: str = ""  # .env 占位，用户填写
-    deepseek_base_url: str = ""
-    deepseek_small_model: str = "DeepSeek-R1-0528-Qwen3-8B"
-    deepseek_large_model: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
 
     # ---------- 向量库 / Embedding / LLM ----------
     chroma_dir: str = "./chroma_data"  # Chroma 本地文件模式目录
     embedding_backend: str = "ollama"  # local(本地模型) | ollama(经 Ollama 提供)
-    llm_backend: str = "ollama"  # ollama(本地) | deepseek(OpenAI 兼容 API)
+    llm_backend: str = "deepseek"  # deepseek(OpenAI 兼容 API) | ollama(本地)
+    deepseek_chat_model: str = "deepseek-v4-flash"  # 001 对话 LLM 模型（DeepSeek OpenAI 兼容）
     ollama_base_url: str = "http://localhost:11434"
     ollama_embed_model: str = "bge-m3"
     ollama_chat_model: str = "qwen2"
+    # 006 意图识别模型（LLM 自检/澄清兜底，默认不启用 intent_model_self_check）
+    deepseek_small_model: str = "DeepSeek-R1-0528-Qwen3-8B"
+    deepseek_large_model: str = ""
     # 当 embedding_backend=local 时，加载 sentence-transformers 模型名
     local_embed_model: str = "BAAI/bge-m3"
 

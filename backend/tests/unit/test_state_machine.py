@@ -138,6 +138,43 @@ def test_stale_processing_times_out(db):
     assert doc.fail_msg == "解析任务超时"
 
 
+def test_delete_rollback_failure_still_marks_failed(db, tmp_path, monkeypatch, caplog):
+    """FR-011 增强：向量回滚删除自身失败 → 捕获并 ERROR 告警，MySQL 仍必须置失败。"""
+    doc = _insert_doc(db, tmp_path, "x", name="broken.md")
+    doc.file_path = str(tmp_path / "nope.md")  # 解析必失败 → 进入回滚分支
+    db.commit()
+
+    def boom_delete(doc_id, raise_on_error=False):
+        raise RuntimeError("Chroma delete 崩溃")
+
+    monkeypatch.setattr("app.vector_store.chroma.delete_by_doc_id", boom_delete)
+
+    with caplog.at_level("ERROR", logger="app.services.knowledge.pipeline"):
+        pipeline.process_document(doc.id)
+
+    db.refresh(doc)
+    assert doc.status == "失败"  # 删除失败不影响 MySQL 置失败
+    assert doc.fail_msg
+    task = _task(db, doc.id)
+    assert task.status == "失败"
+    assert any("向量回滚失败" in r.message for r in caplog.records)
+
+
+def test_duplicate_trigger_refused_when_in_flight(db, tmp_path):
+    """文档处理中（已有进行中任务）时重复触发 → 拒绝，防止并发竞态。"""
+    doc = _insert_doc(db, tmp_path, "内容", name="dup.md")
+    db.add(ParseTask(doc_id=doc.id, status="处理中"))
+    db.commit()
+
+    pipeline.process_document(doc.id)
+
+    db.refresh(doc)
+    assert doc.status == "处理中"  # 未被推进为就绪/失败
+    tasks = db.scalars(select(ParseTask).where(ParseTask.doc_id == doc.id)).all()
+    assert len(tasks) == 1  # 未创建第二个任务
+    assert chroma.get_collection().count() == 0  # 未写入切片
+
+
 def _dummy_embedding():
     """常量向量即可：同一文档内所有切片维度一致即可满足 Chroma。"""
 
