@@ -18,7 +18,7 @@
 
 - [ ] T005 [P] 在 `backend/app/db/models.py` 追加 SQLAlchemy 模型 `KnowledgeDoc`（id BIGINT PK、doc_name VARCHAR(255)、file_path VARCHAR(500)、status ENUM('处理中','就绪','失败') 默认'处理中'、fail_msg VARCHAR(1000) 可空、upload_time DATETIME）与 `ParseTask`（id PK、doc_id FK→knowledge_doc.id、status ENUM('处理中','成功','失败','已取消')、create_time、finish_time 可空、fail_msg 可空），并按 data-model.md 建立 `(status)`、`(upload_time)`、`(status)` 索引（复用 001 的 `db/session.py` Base）
 - [ ] T006 [P] 在 `backend/app/core/config.py` 定义 pydantic-settings 配置类，读取 `max_upload_size_mb`、`chunk_size`、`chunk_overlap`、`parse_timeout_seconds`、`embedding_batch_size`（默认值见 contracts/knowledge-api.md 配置契约）
-- [ ] T007 [P] 在 `backend/app/core/async_tasks.py` 实现后台任务提交薄接口（封装 FastAPI `BackgroundTasks`，暴露 `submit_background_task(func, *args)`），抽象层保证后续切换 Celery 仅改此模块
+- [ ] T007 [P] 在 `backend/app/core/async_tasks.py` 实现后台任务提交薄接口（`run_in_background(func, *args)` → 提交 FastAPI `BackgroundTasks`（`BackgroundTasks.add_task(func, *args)`）进程内执行，任务定义见 `services/knowledge/pipeline.py::process_document`）；薄接口保持函数签名稳定，未来切回 Celery 时仅改内部提交实现（`.delay()`），上层 upload 接口不感知切换（见 research §1）
 - [ ] T008 [P] 在 `backend/app/vector_store/chroma.py` 实现/扩展 Chroma collection 封装：`get_or_create_collection`、`add_chunks(doc_id, chunks)`（写入时附带 `metadata.doc_id`、`metadata.chunk_index`、`metadata.snippet`）、`delete_by_doc_id(doc_id)`（按 `doc_id` 确定性批量删除）、以及供 001 检索复用的 `query`（与 001 共享，新增 delete 能力满足 FR-005/FR-008）
 
 **检查点**：基础就绪，可开始并行实施用户故事。
@@ -77,8 +77,9 @@
 
 ## 阶段 6：打磨与横切关注点（Polish & Cross-Cutting Concerns）
 
-- [ ] T026 [P] 在 `backend/app/core/async_tasks.py` 实现超时守卫：周期性扫描 `status='处理中'` 且超过 `parse_timeout_seconds`（默认 600s）的 ParseTask，将其与关联文档置为「失败」并记录「处理超时」原因，保证异常中断（进程崩溃）也能收敛、不长期停留「处理中」（SC-004）
-- [ ] T027 [P] 完善 `backend/.env.example`：核对并补充所有配置项（`max_upload_size_mb`/`chunk_size`/`chunk_overlap`/`parse_timeout_seconds`/`embedding_batch_size`）的中文注释说明；核对 `specs/002-knowledge-base/quickstart.md` 中场景 1/2/3 与边界用例的 curl 命令可执行
+- [ ] T026 [P] 在 `backend/app/services/knowledge/pipeline.py` 暴露超时守卫函数 `mark_stale_processing_timeout`：扫描 `status='处理中'` 且超过 `parse_timeout_seconds`（默认 600s）的 ParseTask，将其与关联文档置为「失败」并记录「处理超时」原因，保证异常中断（进程崩溃）也能收敛、不长期停留「处理中」（SC-004）
+- [ ] T026b [P] 运行期周期清扫：在 `backend/app/main.py` lifespan 内用 `asyncio.create_task` 启动内部循环，`await asyncio.sleep(parse_timeout_seconds)` 后周期调用 `mark_stale_processing_timeout`（随应用启动/停止，无需 celery-beat/外部常驻进程）；配合启动时的 `sweep_zombie_tasks()` 形成双层兜底（research §1）：启动清扫 + 运行期周期清扫
+- [ ] T027 [P] 完善 `backend/.env.example`：核对并补充所有配置项（`max_upload_size_mb`/`chunk_size`/`chunk_overlap`/`parse_timeout_seconds`/`embedding_batch_size`）的中文注释说明；核对 `specs/002-knowledge-base/quickstart.md` 中场景 1/2/3 与边界用例的 curl 命令可执行；删除/注释 Celery、Redis 相关配置（`CELERY_BROKER_URL` 等）标记为不再必需（保留见 research §1 可选扩展）
 - [ ] T028 端到端验收：按 `specs/002-knowledge-base/quickstart.md` 运行全部验证场景与边界用例（非法格式/空文件/超限/部分切片失败/处理中删除/未授权），核对 SC-001~SC-007（上传 2 秒返回、100KB 文档 2 分钟内就绪、状态无卡死、删除后命中率 0）
 
 ---

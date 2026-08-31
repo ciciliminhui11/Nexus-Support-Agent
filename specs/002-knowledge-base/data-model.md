@@ -73,7 +73,7 @@ erDiagram
 
 ## 3. ParseTask（解析任务）
 
-后台处理单元，驱动 KnowledgeDoc 状态流转（FR-003 / FR-004）。v1 为进程内任务记录；切换 Celery 时映射为队列消息 + 该记录。
+后台处理单元，驱动 KnowledgeDoc 状态流转（FR-003 / FR-004）。由 FastAPI `BackgroundTasks` 进程内执行的 `process_document` 更新该记录，两者经 `doc_id` 关联（免 Redis/Celery）；配套超时守卫（启动清扫 + 运行期 `asyncio.create_task` 周期循环）兜底收敛，见 research §1。
 
 | 字段 | 类型 | 约束 | 说明 |
 |---|---|---|---|

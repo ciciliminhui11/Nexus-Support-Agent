@@ -8,7 +8,7 @@
 
 - 后端已启动：`uvicorn app.main:app --host 0.0.0.0 --port 8000`
 - MySQL 8.0 已就绪，`system_config` 表载入默认配置（见[配置契约](contracts/chat-stream.md)）
-- Chroma 向量库已就绪；Embedding 模型（bge-m3）与 LLM（Ollama Qwen2）本地可用
+- Chroma 向量库已就绪；Embedding 模型（bge-m3，Ollama 提供）可用，LLM 已配置 DeepSeek V4 Flash（`.env` 填 `DEEPSEEK_API_KEY`，`LLM_BACKEND=deepseek`）
 - 知识库存在至少一条**就绪**文档（上传/解析由 002 特性提供，可用预置测试数据 `docs/faq.md`）
 - 存在有效会话（创建会话由 004 特性提供；可用 SQL 预置一条会话记录）
 - **（可选）Reranker 精排模型**（sentence-transformers + `bge-reranker-v2-m3`，按 重难点总结 第五部分镜像安装教程 安装）。未安装时自动回退 RRF 融合排序，不影响主链路，仅 `meta` 引用顺序为融合序。

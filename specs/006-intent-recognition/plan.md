@@ -16,13 +16,13 @@
 
 ## 技术上下文
 
-**语言/版本**：Python 3.11（FastAPI + uvicorn）
+**语言/版本**：Python 3.14（FastAPI + uvicorn）
 
-**主要依赖**：fastapi、httpx（模型 API 调用）、**ahocorasick-ng**（关键词多模式串匹配，最长匹配）、**pyparsing**（句式模板解析）、pyyaml（词库/句式模板/负样本配置）、pydantic-settings + python-dotenv（配置/密钥）；测试 pytest
+**主要依赖**：fastapi、httpx（模型 API 调用）、**pyahocorasick 2.3.1**（关键词多模式串匹配，最长匹配；ahocorasick-ng 无 3.14/Windows 发行版，改用同 API 上游包，见 docs/安装教程.md §1）、**pyparsing**（句式模板解析）、pyyaml（词库/句式模板/负样本配置）、pydantic-settings + python-dotenv（配置/密钥）；测试 pytest
 
 **存储**：无新增业务表。复用 001/004 的 `message.intent_label` 字段；配置分三层——`.env`（密钥类）、`system_config` 表（阈值等运行时参数）、YAML/JSON 配置文件（词库/句式模板/负样本库）
 
-**测试**：pytest（unit + integration；覆盖关键词匹配（ahocorasick-ng）、句式模板（pyparsing）、归一化、双阈值、反向校准、三层编排、闲聊不检索路由、密钥未配置降级）
+**测试**：pytest（unit + integration；覆盖关键词匹配（pyahocorasick）、句式模板（pyparsing）、归一化、双阈值、反向校准、三层编排、闲聊不检索路由、密钥未配置降级）
 
 **目标平台**：Linux 服务器（后端服务，本地沙箱可运行）
 

@@ -14,7 +14,7 @@
 
 ## 技术上下文
 
-**语言/版本**：Python 3.11（FastAPI + uvicorn）
+**语言/版本**：Python 3.14（FastAPI + uvicorn）
 
 **主要依赖**：fastapi、sqlalchemy、pymysql、pydantic-settings、pytest
 

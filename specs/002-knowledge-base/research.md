@@ -4,11 +4,16 @@
 
 本文件记录 Phase 0 对技术上下文 unknowns / 依赖 / 集成的研究结论，统一为「决策 / 理由 / 备选方案」。
 
-## 1. 异步任务方案（BackgroundTasks vs Celery）
+## 1. 异步任务方案（FastAPI BackgroundTasks + 进程内周期清扫）
 
-- **决策**：v1 采用 FastAPI `BackgroundTasks` 进程内后台任务执行「解析→切分→向量化→入库」；用一层薄接口（`core/async_tasks.py`）抽象任务提交，切换 Celery 时仅改该模块。
-- **理由**：规格假设明确「v1 使用进程内后台任务即可，大规模切换分布式队列」；单机沙箱下 BackgroundTasks 零额外依赖、满足「接口先返回、状态机记录」。抽象层保证后续可迁移。
-- **备选方案**：直接上 Celery → 需 Redis/Broker，本地沙箱过重、违反最小化；同步阻塞 → 违背宪法原则四（异步化硬性要求）。
+> **修订（2026-08-31）**：按需求决定，异步任务由 v1/当前已落地的 Celery + Redis 改为 **FastAPI `BackgroundTasks` 进程内后台任务**。理由：Redis/Celery 部署较复杂（本机需另装 Redis，见 docs/安装教程.md §2），不适合 demo 阶段；后台任务进程内执行零额外依赖，后续需要再扩展回 Celery。`core/async_tasks.py` 薄接口保留，内部改为 `BackgroundTasks.add_task` 提交。配套「僵尸任务清扫」双层兜底防卡死。
+
+- **决策**：采用 FastAPI `BackgroundTasks` 在 Web 进程同事件循环内执行「解析→切分→向量化→入库」。任务主体 `process_document` 于 `app/services/knowledge/pipeline.py`（函数式，非 `@celery_app.task`），提交经 `core/async_tasks.py::run_in_background` → `BackgroundTasks.add_task(process_document, doc_id)`，HTTP 先返回（FR-002）。
+- **僵尸任务清扫（SC-004 防卡死）**：`process_document` 自开 `SessionLocal()`，与请求会话解耦。配套双层兜底：
+  1. **启动清扫**：`main.py` lifespan 启动时调 `sweep_zombie_tasks()` → `mark_stale_processing_timeout()`，把上次进程崩溃遗留的超时「处理中」任务/文档置失败（进程崩溃即新解释器启动，遗留必然僵尸）。
+  2. **运行期周期清扫**：`main.py` lifespan 内 `asyncio.create_task` 启动一个内部循环，每隔 `parse_timeout_seconds` 调一次 `mark_stale_processing_timeout()`，处理进程长期存活期间的任务崩溃/卡死（不需要 celery-beat/APScheduler）。
+- **理由**：上传接口立即返回（FR-002）、进程内执行零外部依赖（免 Redis/Celery，demo 友好）；抽象层（async_tasks.py）早已预留，未来扩回 Celery 仅改提交实现；「进度内崩溃留僵尸」这一 BackgroundTasks 固有缺陷由双层清扫兜底，满足 SC-004 无卡死；单进程 demo 场景语义足够。
+- **备选方案**：曾用/已落地 Celery 5 + Redis（broker / 结果后端均 Redis）→ 任务解耦出 Web 进程、可独立扩展，但需另装 Redis、Windows 下 worker 须 `-P solo`，对 demo 过重；同步阻塞 → 违背宪法原则四（异步化硬性要求）。未来任务量上升或需跨机扩展时，可循本备选扩回 Celery，`run_in_background` 薄接口无需改动。
 
 ## 2. 文本切分策略（txt / md）
 
@@ -50,7 +55,7 @@
 
 ## 5. 状态机与「处理中」卡死防护（SC-004）
 
-- **决策**：`KnowledgeDoc.status` 状态机 `处理中 →（就绪|失败）`，单向收敛；后台任务启动前写入「处理中」，完成/异常时写入终态；提供进程内任务注册表，配合超时守卫：任务超时（如 10 分钟）判定失败并置状态。
+- **决策**：`KnowledgeDoc.status` 状态机 `处理中 →（就绪|失败）`，单向收敛；后台任务启动前写入「处理中」，完成/异常时写入终态；配合超时守卫（`mark_stale_processing_timeout`，超时如 10 分钟判定失败）：双层触发（启动清扫 + 运行期 `asyncio.create_task` 周期循环，见 §1），保证进程崩溃/任务卡死也能收敛，不长期停留「处理中」。
 - **理由**：SC-004 要求 100% 准确反映状态、无卡死；超时守卫保证异常中断（进程崩溃）也能收敛，不长期停留「处理中」。
 - **备选方案**：仅依赖任务自身完成回调 → 进程崩溃时状态永久「处理中」，违反 SC-004；引入心跳表 → v1 过重，超时守卫足够。
 

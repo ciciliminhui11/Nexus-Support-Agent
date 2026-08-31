@@ -10,11 +10,11 @@
 
 本特性实现 RAG 智能问答的核心闭环：输入校验（≤500 字 + 每日 100 次配额）→ 读取会话最近 N 轮历史 → Query 向量化 → 混合检索（向量路[Chroma 余弦 + 阈值过滤] + BM25 路[jieba 分词 + 自研 Okapi BM25 + 显著词闸门] 双路召回 → RRF 融合排序 → 粗筛候选池 `rag_candidate_k` → Reranker 精排取 `rag_top_k`[可选，缺失/失败回退融合序]）→ 无命中走固定兜底话术（禁止编造）→ Prompt 组装（System Prompt + 带编号来源的知识片段 + 历史 + 问题）→ LLM 流式调用 → SSE 以 `data`/`meta`/`finish`/`error` 事件流式返回（token + 引用来源 + 结束 + 错误）→ 会话消息持久化 → 输出后来源校验。
 
-技术方案遵循宪法与初步方案：Python 3.11 + FastAPI，SQLAlchemy + MySQL 8.0 存元数据，Chroma 存向量，bge-m3 本地 Embedding，Ollama Qwen2 提供 LLM。RAG 核心链路（切分/向量化/检索/Prompt 组装/SSE 封装）全部自研可读，不引入黑盒 LangChain 链。LLM 超时 / 429 限流以 SSE `error` 事件友好返回。
+技术方案遵循宪法与初步方案：Python 3.14 + FastAPI，SQLAlchemy + MySQL 8.0 存元数据，Chroma 存向量，bge-m3 本地 Embedding（Ollama 提供），LLM 用 DeepSeek V4 Flash（OpenAI 兼容 API，`deepseek-v4-flash`；可插拔，`llm_backend` 可回退 Ollama 本地）。RAG 核心链路（切分/向量化/检索/Prompt 组装/SSE 封装）全部自研可读，不引入黑盒 LangChain 链。LLM 超时 / 429 限流以 SSE `error` 事件友好返回。
 
 ## 技术上下文
 
-**语言/版本**：Python 3.11（FastAPI + uvicorn）
+**语言/版本**：Python 3.14（FastAPI + uvicorn）
 
 **主要依赖**：fastapi、uvicorn、sqlalchemy、pymysql、chromadb、sentence-transformers（bge-m3 Embedding）、jieba（BM25 中文分词，打分自研 Okapi BM25）、httpx（调用 Ollama 兼容接口）、pydantic-settings、python-dotenv、pytest；Reranker 精排（sentence-transformers CrossEncoder + bge-reranker-v2-m3）为**可选依赖**，未安装自动降级
 
