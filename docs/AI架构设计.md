@@ -34,7 +34,7 @@ flowchart TD
 
     TOPK -- 两路皆空 --> EMPTY[兜底话术<br/>不调用 LLM]
     TOPK -- 有命中 --> PROMPT[Prompt 组装<br/>System Prompt + 编号来源片段 + 历史 + 问题]
-    PROMPT --> LLM[LLM 流式调用<br/>Ollama Qwen2]
+    PROMPT --> LLM[LLM 流式调用<br/>DeepSeek V4 Flash（OpenAI 兼容 API）]
     LLM --> SSE[SSE 事件流<br/>data / meta / finish / error]
     SSE --> PERSIST[消息持久化 + 来源后校验]
 ```
