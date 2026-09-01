@@ -8,7 +8,7 @@ research §3：粗筛（向量+BM25 经 RRF 融合）后，用本地 CrossEncode
 - 未安装 sentence-transformers（`find_spec` 检测，不触发重导入）→ Noop；
 - 模型加载 / 推理异常 → retriever 层 try/except 回落融合序。
 
-安装教程（用户自行操作，镜像见 docs/重难点总结.md 第五部分 §5）。
+安装教程（用户自行操作，见 backend/README.md「API Key / 模型配置方式」）。
 """
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def _build_reranker() -> Reranker:
     if importlib.util.find_spec("sentence_transformers") is None:
         logger.warning(
             "sentence-transformers 未安装，Reranker 降级为 NoopReranker（保持 RRF 融合序）。"
-            "安装教程见 docs/重难点总结.md 第五部分 §5。"
+            "安装教程见 backend/README.md「API Key / 模型配置方式」。"
         )
         return NoopReranker()
     return CrossEncoderReranker(settings.rag_reranker_model)

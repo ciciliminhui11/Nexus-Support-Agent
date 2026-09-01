@@ -10,7 +10,7 @@
 - **理由**：ahocorasick-ng 是 pyahocorasick 的维护继任者（Cython 加速、API 兼容家族：`Automaton` / `add_word` / `make_automaton` / `iter` / `iter_long`），对几百到几千中文关键词量级性能与内存绰绰有余；天然支持多模式串同时匹配与最长匹配，正是 FR-002 所需。词边界是该类库的共性空白（按字符粒度匹配、无语言词法概念），需薄封装补上，但这层逻辑简单可测，不影响「读得懂、控得住」。
 - **宪法说明**：宪法原则一「核心链路必须自研可读」明示的清单是 RAG 链路的切分/Embedding/检索/Prompt 组装；本特性为问答链路前置的辅助匹配组件，选用成熟、原理清晰（goto/failure/output 三表结构）且团队可解释的算法库，不属于「未理解内部逻辑的黑盒高阶链」范畴，故不构成原则一违规。实施时以仓库锁定版本为准核对其确切 API 名（iter_long 与词边界封装）。
 - **备选方案**：自研 AC 自动机（已被用户明确否决，改库方案）；pyahocorasick（已被 ahocorasick-ng 继任，选 ng 版）；朴素逐关键词 `in` 扫描（关键词多时退化为 O(N×L)，无失败指针复用，不满足多模式串同时匹配要求）。
-- **2026-08-30 落地更新**：实测 `ahocorasick-ng` 在 **Python 3.14 / Windows 下无任何可用发行版**（`pip install` 报 `No matching distribution found`，连 sdist 都没有）→ 落地改用其**同 API 上游包 `pyahocorasick` 2.3.1**（有 `cp314-win_amd64` 轮子，实测安装成功，导入名同为 `ahocorasick`）。匹配逻辑（`Automaton` / `add_word` / `make_automaton` / `iter` / `iter_long`）与词边界薄封装完全不受影响，详见 docs/安装教程.md §1。
+- **2026-08-30 落地更新**：实测 `ahocorasick-ng` 在 **Python 3.14 / Windows 下无任何可用发行版**（`pip install` 报 `No matching distribution found`，连 sdist 都没有）→ 落地改用其**同 API 上游包 `pyahocorasick` 2.3.1**（有 `cp314-win_amd64` 轮子，实测安装成功，导入名同为 `ahocorasick`）。匹配逻辑（`Automaton` / `add_word` / `make_automaton` / `iter` / `iter_long`）与词边界薄封装完全不受影响。
 
 ## 2. 句式模板匹配：选用 pyparsing（不自研）
 

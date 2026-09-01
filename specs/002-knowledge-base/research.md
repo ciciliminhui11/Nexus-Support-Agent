@@ -6,7 +6,7 @@
 
 ## 1. 异步任务方案（FastAPI BackgroundTasks + 进程内周期清扫）
 
-> **修订（2026-08-31）**：按需求决定，异步任务由 v1/当前已落地的 Celery + Redis 改为 **FastAPI `BackgroundTasks` 进程内后台任务**。理由：Redis/Celery 部署较复杂（本机需另装 Redis，见 docs/安装教程.md §2），不适合 demo 阶段；后台任务进程内执行零额外依赖，后续需要再扩展回 Celery。`core/async_tasks.py` 薄接口保留，内部改为 `BackgroundTasks.add_task` 提交。配套「僵尸任务清扫」双层兜底防卡死。
+> **修订（2026-08-31）**：按需求决定，异步任务由 v1/当前已落地的 Celery + Redis 改为 **FastAPI `BackgroundTasks` 进程内后台任务**。理由：Redis/Celery 部署较复杂（本机需另装 Redis），不适合 demo 阶段；后台任务进程内执行零额外依赖，后续需要再扩展回 Celery。`core/async_tasks.py` 薄接口保留，内部改为 `BackgroundTasks.add_task` 提交。配套「僵尸任务清扫」双层兜底防卡死。
 
 - **决策**：采用 FastAPI `BackgroundTasks` 在 Web 进程同事件循环内执行「解析→切分→向量化→入库」。任务主体 `process_document` 于 `app/services/knowledge/pipeline.py`（函数式，非 `@celery_app.task`），提交经 `core/async_tasks.py::run_in_background` → `BackgroundTasks.add_task(process_document, doc_id)`，HTTP 先返回（FR-002）。
 - **僵尸任务清扫（SC-004 防卡死）**：`process_document` 自开 `SessionLocal()`，与请求会话解耦。配套双层兜底：

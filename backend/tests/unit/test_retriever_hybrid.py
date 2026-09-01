@@ -2,7 +2,7 @@
 
 用真实 Ephemeral Chroma + 伪 embedding（conftest），验证双路召回、
 阈值过滤、空检索兜底、重排与降级。相似度阈值放宽到 0.1 仅为验证链路
-（伪 embedding 的校准问题见 docs/重难点总结.md 第四部分 §3）。
+（伪 embedding 的校准问题所致）。
 """
 from __future__ import annotations
 

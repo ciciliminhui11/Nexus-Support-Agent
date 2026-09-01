@@ -11,7 +11,7 @@
 - Chroma 向量库已就绪；Embedding 模型可用（bge-m3，SiliconFlow 云端 OpenAI 兼容 API：`.env` 填 `EMBEDDING_API_KEY`，`EMBEDDING_BACKEND=openai_compat`）；LLM 已配置 DeepSeek V4 Flash（`.env` 填 `DEEPSEEK_API_KEY`，`LLM_BACKEND=deepseek`）
 - 知识库存在至少一条**就绪**文档（上传/解析由 002 特性提供，可用预置测试数据 `docs/faq.md`）
 - 存在有效会话（创建会话由 004 特性提供；可用 SQL 预置一条会话记录）
-- **（可选）Reranker 精排模型**（sentence-transformers + `bge-reranker-v2-m3`，按 重难点总结 第五部分镜像安装教程 安装）。未安装时自动回退 RRF 融合排序，不影响主链路，仅 `meta` 引用顺序为融合序。
+- **（可选）Reranker 精排模型**（sentence-transformers + `bge-reranker-v2-m3`，安装见 [backend/README.md](../../backend/README.md)「API Key / 模型配置方式」）。未安装时自动回退 RRF 融合排序，不影响主链路，仅 `meta` 引用顺序为融合序。
 
 ## 验证场景
 

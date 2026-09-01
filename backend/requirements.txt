@@ -1,5 +1,4 @@
 # 后端依赖（Python 3.14 实测兼容清单，2026-08-30）
-# 规划技术选型参考：../初步设计方案.txt
 
 # Web
 fastapi
@@ -18,7 +17,7 @@ pydantic-settings
 # 向量库 / Embedding
 chromadb
 jieba                   # 中文分词，BM25 关键词召回（001 混合检索；打分自研 Okapi BM25）
-# 可选：Reranker 精排（001），安装见 docs/重难点总结.md 第五部分 §5 镜像教程
+# 可选：Reranker 精排（001），安装见 README.md「API Key / 模型配置方式」
 # sentence-transformers
 # torch
 
@@ -28,10 +27,10 @@ python-docx
 
 # 鉴权
 pyjwt
-bcrypt                  # 密码哈希（passlib 与 bcrypt≥4.1 不兼容，直接用 bcrypt，见重难点总结 §1）
+bcrypt                  # 密码哈希（passlib 与 bcrypt≥4.1 不兼容，直接用 bcrypt）
 
 # 意图识别（006）：关键词多模式串匹配
-pyahocorasick           # ahocorasick-ng 无 3.14/Windows 轮子，改用同 API 的上游包 2.3.1（见 docs/安装教程.md §1）
+pyahocorasick           # ahocorasick-ng 无 3.14/Windows 轮子，改用同 API 的上游包 2.3.1
 pyparsing               # 006 句式模板匹配（pyparsing.Regex 命名分组）
 pyyaml                  # 006 词库/模板/负样本 YAML 配置
 
