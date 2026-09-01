@@ -1,6 +1,6 @@
 # 前端（Frontend）
 
-> AI 智能客服系统前端。技术选型：**React 18 + TypeScript + Vite + Ant Design 5**（按 specs/007-frontend-page-design 规格与 plan.md v2，用户确认 React 选型）。当前实现 **MVP（P1 三故事）**：注册/登录、智能问答主界面（流式 + 引用来源）、会话列表与历史会话。
+> AI 智能客服系统前端。技术选型：**React 18 + TypeScript + Vite + Ant Design 5**（按 specs/007-frontend-page-design 规格与 plan.md v2，用户确认 React 选型）。已实现：注册/登录、智能问答主界面（流式 + 引用来源）、会话列表与历史会话、用户反馈（点赞/点踩）、管理端（知识库管理 / 反馈查看 / 配额查看）。
 
 ## 技术栈
 
@@ -22,11 +22,11 @@
 | `src/api/` | HTTP（axios 实例 + 401 拦截）/ SSE 封装 / TanStack Query hooks / JWT 存储抽象 |
 | `src/stores/` | Zustand 登录态与会话 UI 态 |
 | `src/components/` | 聊天（消息气泡/来源/光标）/ 会话列表等组件 |
-| `src/pages/` | 登录/注册/问答主界面（管理端知识库页面待后续故事） |
+| `src/pages/` | 登录/注册/问答主界面 + 管理端（`admin/`：知识库管理、反馈、配额，`AdminOnly` 守卫） |
 | `src/hooks/` | 流式问答编排 / 自动滚动 |
 | `src/styles/` | AntD 主题 token 单源 + 全局样式 |
 | `src/types/` | 领域类型与 SSE 事件类型 |
-| `src/router/` | 路由表 + 守卫 |
+| `src/router/` | 路由表 + 守卫（RequireAuth / AdminOnly / GuestOnly） |
 | `tests/mocks/` | 本地 mock SSE 服务（测试用） |
 
 ## 启动说明
@@ -42,7 +42,7 @@ npm run dev        # http://localhost:5173，/api 代理到后端
 ## 测试
 
 ```bash
-npm run test:unit   # Vitest 单元测试（29 用例：校验/SSE 封装/流式编排/组件）
+npm run test:unit   # Vitest 单元测试（39 用例：校验/SSE 封装/流式编排/组件）
 npm run test:e2e    # Playwright E2E（直连真实后端，见下）
 ```
 
