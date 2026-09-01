@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+dist-ssr/
+
+# env（本地密钥不进仓库）
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+npm-debug.log*
+
+# typescript
+*.tsbuildinfo
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+
+# testing
+coverage/
+playwright-report/
+test-results/

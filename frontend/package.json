@@ -2,7 +2,44 @@
   "name": "nexus-support-agent-frontend",
   "version": "0.1.0",
   "private": true,
-  "description": "AI 智能客服系统前端（骨架阶段，待补充）",
-  "scripts": {},
-  "dependencies": {}
+  "description": "AI 智能客服系统前端（React + AntD 5，MVP：P1 三故事）",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "mock:sse": "tsx tests/mocks/sse-server.ts",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.6.1",
+    "@microsoft/fetch-event-source": "^2.0.1",
+    "@streamdown/code": "^1.1.1",
+    "@streamdown/math": "^1.0.2",
+    "@streamdown/mermaid": "^1.0.2",
+    "@tanstack/react-query": "^5.60.0",
+    "antd": "^5.24.0",
+    "axios": "^1.7.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.1.0",
+    "streamdown": "^2.6.0",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^26.4.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^25.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^3.0.0"
+  }
 }

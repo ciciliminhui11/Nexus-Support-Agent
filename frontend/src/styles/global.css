@@ -1,0 +1,95 @@
+/* 全局样式：正文 ≥14px、WCAG AA 对比度、清晰 focus 焦点环、表格防爆、Streamdown 域隔离 */
+
+:root {
+  --chat-max-width: 860px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-size: 14px; /* 正文不小于 14px（设计规范） */
+  line-height: 1.6;
+  color: rgba(0, 0, 0, 0.88);
+  background: #f5f6fa;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 清晰可用的焦点环（无障碍 FR-006） */
+:focus-visible {
+  outline: 2px solid #2f6bff;
+  outline-offset: 2px;
+}
+
+/* 表格防爆：横向滚动而非撑破布局 */
+.ant-table-wrapper {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+}
+
+.ant-table-wrapper table {
+  white-space: nowrap;
+}
+
+/* Streamdown 渲染域：与全局样式隔离，正文排版 */
+.streamdown-content {
+  font-size: 14px;
+  line-height: 1.7;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.streamdown-content pre {
+  max-width: 100%;
+  overflow-x: auto;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.streamdown-content table {
+  max-width: 100%;
+  overflow-x: auto;
+  display: block;
+}
+
+/* 流式生成光标 */
+.stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: #2f6bff;
+  animation: stream-blink 1s steps(1) infinite;
+}
+
+@keyframes stream-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 通用滚动条优化 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
