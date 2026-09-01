@@ -29,7 +29,10 @@ def format_chunks(chunks: list[dict]) -> str:
 
 def _messages(system: str, history: list[dict], question: str) -> list[dict]:
     msgs = [{"role": "system", "content": system}]
-    msgs.extend({"role": h["role"], "content": h["content"]} for h in history)
+    for h in history:
+        # 数据库中 AI 消息 role="ai"，但 LLM API 期望 role="assistant"
+        role = "assistant" if h["role"] == "ai" else h["role"]
+        msgs.append({"role": role, "content": h["content"]})
     msgs.append({"role": "user", "content": question})
     return msgs
 

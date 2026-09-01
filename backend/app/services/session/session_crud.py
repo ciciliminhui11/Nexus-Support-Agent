@@ -5,8 +5,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.logging import get_logger
 from app.db.models import ChatSession, Message
 from app.services.config_service import get_config_value
+
+logger = get_logger(__name__)
 
 
 def create_session(db: Session, user_id: int) -> ChatSession:
@@ -22,6 +25,7 @@ def list_sessions(
     db: Session, user_id: int, page: int = 1, page_size: int = 20
 ) -> tuple[int, list[ChatSession]]:
     """当前用户会话列表，按创建时间倒序分页。"""
+    logger.debug("list_sessions called for user_id=%d, page=%d, page_size=%d", user_id, page, page_size)
     total = db.scalar(
         select(func.count()).select_from(ChatSession).where(ChatSession.user_id == user_id)
     ) or 0
@@ -35,17 +39,24 @@ def list_sessions(
         )
         .all()
     )
+    logger.debug("list_sessions returning %d items for user_id=%d", len(items), user_id)
     return total, items
 
 
 def get_session_for_user(db: Session, session_id: int, user_id: int) -> ChatSession | None:
     """按 id + owner 查询；不满足返回 None（调用方转 404，不泄露他人会话存在性）。"""
-    return db.scalar(
-        select(ChatSession).where(
-            ChatSession.id == session_id,
-            ChatSession.user_id == user_id,
-        )
+    session = db.scalar(
+        select(ChatSession).where(ChatSession.id == session_id)
     )
+    if session is None:
+        return None
+    if session.user_id != user_id:
+        logger.warning(
+            "User %d attempted to access session %d owned by user %d",
+            user_id, session_id, session.user_id
+        )
+        return None
+    return session
 
 
 def count_messages(db: Session, session_id: int) -> int:

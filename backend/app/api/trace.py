@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin
@@ -54,6 +54,7 @@ def list_traces(
             ),
         )
         .group_by(TraceEvent.trace_id, TraceEvent.trace_type)
+        .where(or_(TraceEvent.user_id.is_(None), TraceEvent.user_id == user.id))
     )
 
     if trace_type:
@@ -109,6 +110,7 @@ def detail_trace(
         db.execute(
             select(TraceEvent)
             .where(TraceEvent.trace_id == trace_id)
+            .where(or_(TraceEvent.user_id.is_(None), TraceEvent.user_id == user.id))
             .order_by(TraceEvent.seq)
         )
         .scalars()
