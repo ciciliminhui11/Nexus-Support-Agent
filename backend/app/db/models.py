@@ -172,6 +172,40 @@ class Feedback(Base):
     )
 
 
+# ---------- 008 链路埋点 ----------
+class TraceEvent(Base):
+    """链路埋点 span（追加式观测表）。
+
+    一次链路（文档入库 / 问答）的每个阶段平铺为一行，用 `trace_id` 关联；
+    `seq` 保持同 trace 内顺序（meta 行 seq=0 携带 question/doc_name 上下文）。
+    观测数据可丢：落库失败只记日志不重试，不影响业务链路（FR-003/FR-010）。
+    """
+
+    __tablename__ = "trace_event"
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    trace_type: Mapped[str] = mapped_column(String(20), nullable=False)  # ingest | chat
+    stage: Mapped[str] = mapped_column(String(50), nullable=False)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)  # ok | error | skipped
+    start_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    doc_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    session_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    create_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+    __table_args__ = (
+        Index("ix_trace_trace_id", "trace_id"),
+        Index("ix_trace_type_time", "trace_type", "create_time"),
+        Index("ix_trace_session", "session_id"),
+    )
+
+
 # ---------- 公共：运行时配置 ----------
 class SystemConfig(Base):
     """运行时热调参数（key-value）。未配置的 key 回落到 app/config.py 默认值。"""

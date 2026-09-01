@@ -9,7 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
-from app.api import auth, chat, feedback, knowledge, session as session_api
+from app.api import (
+    auth,
+    chat,
+    feedback,
+    intent_debug,
+    knowledge,
+    session as session_api,
+    trace as trace_api,
+)
 from app.config import settings
 from app.core.exceptions import BizError
 from app.core.logging import get_logger, setup_logging
@@ -114,16 +122,29 @@ async def lifespan(app: FastAPI):
     warmup_reranker()
     sweep_zombie_tasks()
     stop = asyncio.Event()
+    tasks: list[asyncio.Task] = []
     sweeper = asyncio.create_task(_runtime_zombie_sweeper_task(stop))
+    tasks.append(sweeper)
+    # 008 链路埋点后台落库（FR-003）：trace_flush_enabled 时启动周期 flush；
+    # 与僵尸清扫器同构，随 lifespan 启停（research.md §2）。
+    trace_flusher: asyncio.Task | None = None
+    if settings.trace_flush_enabled:
+        from app.services.tracing import trace_flush_task
+
+        trace_flusher = asyncio.create_task(trace_flush_task(stop))
+        tasks.append(trace_flusher)
+        logger.info("trace 后台落库任务已启动")
     logger.info("应用启动完成（运行期僵尸清扫循环已启动）")
     yield
-    # 应用关闭：停止运行期清扫协程，避免残留未取消协程告警
+    # 应用关闭：停止后台协程，避免残留未取消协程告警
     stop.set()
-    sweeper.cancel()
-    try:
-        await sweeper
-    except asyncio.CancelledError:
-        pass
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
@@ -165,3 +186,5 @@ app.include_router(session_api.router)
 app.include_router(knowledge.router)
 app.include_router(chat.router)
 app.include_router(feedback.router)
+app.include_router(intent_debug.router)
+app.include_router(trace_api.router)

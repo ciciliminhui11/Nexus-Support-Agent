@@ -1,5 +1,7 @@
 """Embedding 客户端抽象（可插拔后端）。
 
+- `openai_compat`：OpenAI 兼容 `/embeddings` API（如 SiliconFlow 免费 bge-m3），
+  模型 `EMBEDDING_API_MODEL`，零本地内存占用；
 - `ollama`（默认）：调用 Ollama `/api/embed`，模型 `OLLAMA_EMBED_MODEL`（bge-m3）；
 - `local`：sentence-transformers 本地加载（可选依赖，未安装时报清晰错误）。
 
@@ -43,6 +45,47 @@ class OllamaEmbeddingClient(EmbeddingClient):
             raise LLMError(message=f"Embedding 服务不可用：{exc}")
 
 
+class OpenAIBackendEmbeddingClient(EmbeddingClient):
+    """OpenAI 兼容 Embedding API（如 SiliconFlow 免费 bge-m3）。
+
+    POST `{base_url}/embeddings`，批量 `input` + `model`，`Authorization: Bearer` 鉴权；
+    响应 `data` 按 `index` 排序还原入参顺序。测试注入 `httpx.MockTransport`。
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        api_key: str,
+        timeout: float = 30.0,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.api_key = api_key
+        self.timeout = timeout
+        self._transport = transport
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        if not self.api_key:
+            raise LLMError(
+                message="Embedding 服务不可用：未配置 EMBEDDING_API_KEY"
+            )
+        try:
+            with httpx.Client(timeout=self.timeout, transport=self._transport) as client:
+                resp = client.post(
+                    f"{self.base_url}/embeddings",
+                    json={"model": self.model, "input": texts},
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            items = sorted(data.get("data", []), key=lambda x: x.get("index", 0))
+            return [item["embedding"] for item in items]
+        except httpx.HTTPError as exc:
+            raise LLMError(message=f"Embedding 服务不可用：{exc}")
+
+
 class LocalEmbeddingClient(EmbeddingClient):
     """本地 sentence-transformers（bge-m3）。首次调用时加载模型。"""
 
@@ -70,6 +113,12 @@ class LocalEmbeddingClient(EmbeddingClient):
 def get_embedding_client() -> EmbeddingClient:
     if settings.embedding_backend == "local":
         return LocalEmbeddingClient(settings.local_embed_model)
+    if settings.embedding_backend == "openai_compat":
+        return OpenAIBackendEmbeddingClient(
+            settings.embedding_api_base_url,
+            settings.embedding_api_model,
+            settings.embedding_api_key,
+        )
     return OllamaEmbeddingClient(settings.ollama_base_url, settings.ollama_embed_model)
 
 

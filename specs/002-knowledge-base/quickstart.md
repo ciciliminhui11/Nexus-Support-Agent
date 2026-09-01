@@ -7,7 +7,7 @@
 ## 前置条件
 
 - 后端已启动：`uvicorn app.main:app --host 0.0.0.0 --port 8000`
-- MySQL 8.0 已就绪；Chroma 向量库已就绪；bge-m3 本地可用
+- MySQL 8.0 已就绪；Chroma 向量库已就绪；bge-m3 Embedding 可用（SiliconFlow 云端，`.env` 填 `EMBEDDING_API_KEY`）
 - 具备管理员角色的 JWT（登录/注册由 003 特性提供）
 - 准备测试文件：`docs/faq.md`（合法）、`docs/bad.exe`（非法格式）、`docs/empty.txt`（空文件）、`docs/huge.txt`（超 20MB）
 

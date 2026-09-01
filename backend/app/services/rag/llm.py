@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncGenerator
 
 import httpx
@@ -64,7 +65,7 @@ async def _stream_ollama(messages: list[dict]) -> AsyncGenerator[str, None]:
                     if not line.strip():
                         continue
                     try:
-                        data = httpx._types._json_loads(line)
+                        data = json.loads(line)
                     except Exception:
                         continue
                     delta = data.get("message", {}).get("content", "")
@@ -102,7 +103,7 @@ async def _stream_deepseek(messages: list[dict]) -> AsyncGenerator[str, None]:
                     if raw == "[DONE]":
                         break
                     try:
-                        data = httpx._types._json_loads(raw)
+                        data = json.loads(raw)
                     except Exception:
                         continue
                     delta = (

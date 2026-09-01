@@ -89,6 +89,28 @@ CREATE TABLE IF NOT EXISTS feedback (
     CONSTRAINT fk_feedback_user FOREIGN KEY (user_id) REFERENCES `user`(id)
 ) ENGINE=InnoDB COMMENT='用户反馈（消息删除后保留，供统计）';
 
+-- ---------- 008 链路埋点 ----------
+CREATE TABLE IF NOT EXISTS trace_event (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    trace_id    VARCHAR(64) NOT NULL COMMENT '一次链路的关联ID',
+    trace_type  VARCHAR(20) NOT NULL COMMENT 'ingest=文档入库 | chat=问答',
+    stage       VARCHAR(50) NOT NULL COMMENT '阶段名',
+    seq         INT NOT NULL COMMENT '同trace内顺序，meta=0',
+    status      VARCHAR(20) NOT NULL COMMENT 'ok/error/skipped',
+    start_at    DATETIME NOT NULL COMMENT 'span 实际开始时间',
+    duration_ms INT NULL COMMENT '耗时（毫秒）',
+    detail      JSON NULL COMMENT '各阶段指标（question截断/脱敏，不含密钥）',
+    doc_id      BIGINT NULL COMMENT 'FK knowledge_doc.id（可空）',
+    session_id  BIGINT NULL COMMENT 'FK session.id（可空）',
+    user_id     BIGINT NULL COMMENT 'FK user.id（可空）',
+    message_id  BIGINT NULL COMMENT 'FK message.id（可空）',
+    error       VARCHAR(500) NULL COMMENT '短错误消息',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '落库时间',
+    KEY ix_trace_trace_id (trace_id),
+    KEY ix_trace_type_time (trace_type, create_time),
+    KEY ix_trace_session (session_id)
+) ENGINE=InnoDB COMMENT='链路埋点 span（008，追加式观测表，可定时清理）';
+
 -- ---------- 公共：运行时配置 ----------
 CREATE TABLE IF NOT EXISTS system_config (
     id         BIGINT AUTO_INCREMENT PRIMARY KEY,

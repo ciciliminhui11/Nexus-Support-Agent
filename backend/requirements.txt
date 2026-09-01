@@ -32,7 +32,8 @@ bcrypt                  # 密码哈希（passlib 与 bcrypt≥4.1 不兼容，�
 
 # 意图识别（006）：关键词多模式串匹配
 pyahocorasick           # ahocorasick-ng 无 3.14/Windows 轮子，改用同 API 的上游包 2.3.1（见 docs/安装教程.md §1）
-# 006 实现时另需：pyparsing（句式模板）、pyyaml（词库/模板/负样本配置）
+pyparsing               # 006 句式模板匹配（pyparsing.Regex 命名分组）
+pyyaml                  # 006 词库/模板/负样本 YAML 配置
 
 # LLM 调用（OpenAI 兼容协议，httpx 直连；可对接 Ollama / DeepSeek / 通义千问）
 httpx

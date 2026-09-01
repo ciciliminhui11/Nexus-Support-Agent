@@ -73,7 +73,7 @@
 
 ## 9. 配置体系（密钥占位与阈值）
 
-- **决策**：密钥类敏感配置走 `.env`（`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_SMALL_MODEL`、`DEEPSEEK_LARGE_MODEL`），提供 `.env.example` 占位模板，真实密钥不提交仓库；非敏感参数（双阈值、词库/模板/负样本文件路径、澄清重试次数）走 `system_config` 表 + 配置文件。
+- **决策**：密钥类敏感配置走 `.env`。小模型层用**独立凭据** `SMALL_MODEL_NAME`/`SMALL_MODEL_API_KEY`/`SMALL_MODEL_BASE_URL`（可指向第三方/自建端点，不复用 DeepSeek）；兜底层复用 `DEEPSEEK_API_KEY`/`DEEPSEEK_BASE_URL` + `DEEPSEEK_LARGE_MODEL`。`.env.example` 提供占位模板，真实密钥不提交仓库；非敏感参数（双阈值、词库/模板/负样本文件路径、澄清重试次数）走 `system_config` 表 + 配置文件。
 - **理由**：FR-014 要求模型密钥经环境变量、禁止硬编码；词库/模板/负样本是运营可调数据，落配置文件便于迭代维护，双阈值等运行时参数落 `system_config` 便于热调。
 - **备选方案**：全部落 `.env`（词库这类长文本不适合环境变量）；全部落数据库（密钥与运维配置混存，不利于本地开发快速起步）。
 

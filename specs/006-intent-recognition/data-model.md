@@ -110,10 +110,12 @@ after_sale:
 
 | 变量 | 占位 | 说明 |
 |---|---|---|
-| `DEEPSEEK_API_KEY` | 用户填写 | 模型 API 密钥 |
-| `DEEPSEEK_BASE_URL` | 用户填写 | OpenAI 兼容 base_url（官方或自建 vLLM/第三方平台） |
-| `DEEPSEEK_SMALL_MODEL` | `DeepSeek-R1-0528-Qwen3-8B` | 小模型（默认值，可改；非官方 API 直供 ID，指向自建/第三方端点） |
-| `DEEPSEEK_LARGE_MODEL` | 用户填写 | 大模型兜底模型名 |
+| `DEEPSEEK_API_KEY` | 用户填写 | 兜底层模型 API 密钥 |
+| `DEEPSEEK_BASE_URL` | 用户填写 | 兜底层 OpenAI 兼容 base_url（官方或自建 vLLM/第三方平台） |
+| `SMALL_MODEL_NAME` | 用户填写 | 小模型层模型名（独立厂商/端点，如 `Qwen/Qwen3-8B`） |
+| `SMALL_MODEL_API_KEY` | 用户填写 | 小模型层 API 密钥（**不复用 DeepSeek 凭据**） |
+| `SMALL_MODEL_BASE_URL` | 用户填写 | 小模型层 OpenAI 兼容 base_url |
+| `DEEPSEEK_LARGE_MODEL` | 用户填写 | 大模型兜底模型名（复用上方 DEEPSEEK 凭据；空则回退 `DEEPSEEK_CHAT_MODEL`） |
 
 > **成本统计**：每次模型调用把 `usage`（prompt/completion/total/reasoning tokens）连同 model、时间戳、所属漏斗层（small_model/fallback）写入统计，用于量化三层漏斗各层成本占比（research §6.1）。
 

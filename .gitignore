@@ -18,6 +18,10 @@ coverage/
 .env.*
 !.env.example
 
+# 运行时数据（向量库 / 上传文件 / 本地存储，不进仓库）
+backend/chroma_data/
+backend/storage/
+
 # Editor / OS
 .vscode/
 .idea/

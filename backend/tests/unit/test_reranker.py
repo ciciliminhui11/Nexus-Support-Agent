@@ -50,6 +50,8 @@ def test_get_reranker_when_st_missing_is_noop(monkeypatch):
 
 
 def test_get_reranker_when_st_present_is_crossencoder(monkeypatch):
+    # .env 的 RAG_RERANKER_ENABLED=false 会覆盖默认值，本用例显式开启
+    monkeypatch.setattr(settings, "rag_reranker_enabled", True)
     _patch_find_spec(monkeypatch, present=True)
     r = reranker.get_reranker()
     assert isinstance(r, reranker.CrossEncoderReranker)

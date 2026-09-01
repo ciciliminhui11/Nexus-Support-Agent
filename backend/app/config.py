@@ -78,24 +78,57 @@ class Settings(BaseSettings):
     intent_clarify_retry: int = 1
     intent_reverse_calibrate: bool = True
     intent_model_self_check: bool = False
-    # DeepSeek API 密钥/Base URL 为 001 与 006 共用（同一厂商）。模型分开：
-    # 001 对话用 deepseek_chat_model；006 意图识别用 deepseek_small/large_model。
+    # DeepSeek API 密钥/Base URL 为 001 对话与 006 兜底层共用（同一厂商）。模型分开：
+    # 001 对话用 deepseek_chat_model；006 兜底层用 deepseek_large_model（空则回退对话模型）；
+    # 006 小模型层用独立 SMALL_MODEL_*（可不同厂商/端点，不复用 DeepSeek 凭据）。
     deepseek_api_key: str = ""  # .env 占位，用户填写
     deepseek_base_url: str = "https://api.deepseek.com"
 
     # ---------- 向量库 / Embedding / LLM ----------
     chroma_dir: str = "./chroma_data"  # Chroma 本地文件模式目录
-    embedding_backend: str = "ollama"  # local(本地模型) | ollama(经 Ollama 提供)
+    embedding_backend: str = "ollama"  # openai_compat(OpenAI 兼容云端 API) | local(本地模型) | ollama(经 Ollama 提供)
+    # openai_compat 后端：OpenAI 兼容 /embeddings（如 SiliconFlow 免费 bge-m3，1024 维）
+    embedding_api_base_url: str = ""
+    embedding_api_key: str = ""
+    embedding_api_model: str = "BAAI/bge-m3"
     llm_backend: str = "deepseek"  # deepseek(OpenAI 兼容 API) | ollama(本地)
     deepseek_chat_model: str = "deepseek-v4-flash"  # 001 对话 LLM 模型（DeepSeek OpenAI 兼容）
     ollama_base_url: str = "http://localhost:11434"
     ollama_embed_model: str = "bge-m3"
     ollama_chat_model: str = "qwen2"
-    # 006 意图识别模型（LLM 自检/澄清兜底，默认不启用 intent_model_self_check）
-    deepseek_small_model: str = "DeepSeek-R1-0528-Qwen3-8B"
+    # 006 意图识别小模型层：独立厂商/端点配置（SMALL_MODEL_*），
+    # 不复用 DEEPSEEK_* 凭据。三项均空时小模型层短路，直接流转大模型兜底。
+    small_model_name: str = ""
+    small_model_api_key: str = ""
+    small_model_base_url: str = ""
+    # 006 大模型兜底层（默认不启用 intent_model_self_check；空则回退 deepseek_chat_model）
     deepseek_large_model: str = ""
+    # 006 补充配置：总开关 / 规则配置路径 / 模型调用参数 / 模板话术
+    intent_enabled: bool = True  # 意图识别总开关（关闭时识别结果恒为 unknown）
+    intent_keywords_path: str = "./config/intent_keywords.yaml"
+    intent_patterns_path: str = "./config/intent_patterns.yaml"
+    intent_negative_samples_path: str = "./config/intent_negative_samples.yaml"
+    intent_llm_timeout_seconds: int = 30  # 意图模型单次请求超时
+    intent_llm_max_retries: int = 2  # 429 指数退避重试次数
+    intent_small_talk_reply: str = (
+        "您好，很高兴为您服务！如果您有任何产品、售后方面的问题，"
+        "随时都可以问我哦～"
+    )
+    intent_complaint_reply: str = (
+        "非常抱歉给您带来不好的体验，我们非常重视您的反馈，已为您记录，"
+        "稍后会有专属客服与您联系处理，请您耐心等待。"
+    )
     # 当 embedding_backend=local 时，加载 sentence-transformers 模型名
     local_embed_model: str = "BAAI/bge-m3"
+
+    # ---------- 008 链路埋点 ----------
+    # 采集/落库/打印均只走 Settings（env），不走 system_config 热调（见 research §7）
+    trace_enabled: bool = True  # 总开关；关闭时 Tracer 全程短路，零采集零打印零落库
+    trace_flush_enabled: bool = True  # 后台批量落库开关（测试置 false）
+    trace_flush_interval_seconds: int = 10  # 周期 flush 间隔
+    trace_buffer_size: int = 200  # 缓冲阈值，达到即提前 flush
+    trace_console_log: bool = True  # 控制台打印可读完整链路块
+    trace_retention_days: int = 7  # 保留期；<=0 表示不清理
 
     # ---------- 日志 ----------
     log_level: str = "INFO"

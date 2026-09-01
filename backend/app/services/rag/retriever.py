@@ -67,8 +67,14 @@ def retrieve(
     top_k: int | None = None,
     threshold: float | None = None,
     candidate_k: int | None = None,
+    stats: dict | None = None,
 ) -> list[dict]:
-    """混合检索命中片段；无就绪文档或两路皆空时返回空列表（走兜底）。"""
+    """混合检索命中片段；无就绪文档或两路皆空时返回空列表（走兜底）。
+
+    `stats` 为可选就地填充的召回统计 dict（008 埋点用，FR-007）：ready_docs /
+    vector_before_threshold / vector_after_threshold / bm25_available / bm25_hits /
+    candidate_pool / reranker(enabled|noop|failed) / empty；不传则行为完全不变。
+    """
     top_k = top_k or int(settings.rag_top_k)
     threshold = threshold if threshold is not None else settings.rag_similarity_threshold
     candidate_k = candidate_k or int(settings.rag_candidate_k)
@@ -77,7 +83,11 @@ def retrieve(
     rrf_k = int(get_config_value(db, "rag_rrf_k", settings.rag_rrf_k))
 
     ready_ids = _ready_doc_ids(db)
+    if stats is not None:
+        stats["ready_docs"] = len(ready_ids)
     if not ready_ids:
+        if stats is not None:
+            stats["empty"] = True
         return []
     names = _doc_names(db, ready_ids)
 
@@ -86,6 +96,8 @@ def retrieve(
     vres = chroma.query(query_vec, n_results=candidate_k, doc_ids=ready_ids)
     vector_hits: list[dict] = []
     ids = vres.get("ids")[0] if vres.get("ids") else []
+    if stats is not None:
+        stats["vector_before_threshold"] = len(ids)
     for i, chunk_id in enumerate(ids):
         # Chroma cosine 距离 = 1 - 余弦相似度；阈值是相似度，需换算
         if vres["distances"][0][i] > 1 - threshold:
@@ -103,11 +115,15 @@ def retrieve(
                 "score": None,
             }
         )
+    if stats is not None:
+        stats["vector_after_threshold"] = len(vector_hits)
     vector_rank = {h["chunk_id"]: pos for pos, h in enumerate(vector_hits, start=1)}
 
     # ---------- BM25 路：全量就绪切片建索引 → 显著词闸门 + 打分 → bm25_top_k ----------
     bm25_hits: list[dict] = []
     bm25_rank: dict[str, int] = {}
+    if stats is not None:
+        stats["bm25_available"] = bool(bm25.JIEBA_AVAILABLE)
     if bm25.JIEBA_AVAILABLE:
         corpus = chroma.get_all_documents(ready_ids)
         c_ids = corpus.get("ids") or []
@@ -130,9 +146,13 @@ def retrieve(
                     }
                 )
         bm25_rank = {h["chunk_id"]: pos for pos, h in enumerate(bm25_hits, start=1)}
+    if stats is not None:
+        stats["bm25_hits"] = len(bm25_hits)
 
     # ---------- RRF 融合 → 候选池（两路皆空 → 空列表兜底） ----------
     if not vector_rank and not bm25_rank:
+        if stats is not None:
+            stats["empty"] = True
         return []
     by_id: dict[str, dict] = {}
     for h in vector_hits:
@@ -146,12 +166,16 @@ def retrieve(
     rrf_score = dict(fused)
     candidates = [by_id[cid] for cid, _ in fused if cid in by_id][:candidate_k]
     if not candidates:
+        if stats is not None:
+            stats["empty"] = True
         return []
 
     # ---------- Reranker 精排 → 最终 top_k ----------
     reranker = get_reranker()
     if isinstance(reranker, NoopReranker):
         ordered = candidates
+        if stats is not None:
+            stats["reranker"] = "noop"
     else:
         try:
             scores = reranker.rerank(question, [c["text"] for c in candidates])
@@ -160,9 +184,15 @@ def retrieve(
                     zip(candidates, scores), key=lambda x: x[1], reverse=True
                 )
             ]
+            if stats is not None:
+                stats["reranker"] = "enabled"
         except Exception as exc:  # noqa: BLE001  模型加载/推理失败 → 回落融合序
             logger.warning("Reranker 精排失败，回落 RRF 融合序：%s", exc)
             ordered = candidates
+            if stats is not None:
+                stats["reranker"] = "failed"
+    if stats is not None:
+        stats["candidate_pool"] = len(candidates)
     final = ordered[:top_k]
     for c in final:
         c["score"] = round(rrf_score.get(c["chunk_id"], 0.0), 6)

@@ -15,6 +15,21 @@ os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests-0123456789abcdef
 os.environ.setdefault("DAILY_QUOTA_LIMIT", "100")
 # Chroma 用临时内存库（EphemeralClient），不落磁盘
 os.environ.setdefault("CHROMA_DIR", "")
+# 006 意图识别：测试环境默认空密钥，模型层短路为 unknown，避免误触真实 API。
+# 小模型层（SMALL_MODEL_*）与兜底（DEEPSEEK_*）两套凭据都要置空——用户 .env 里可能已填
+# 真实密钥，若不置空会泄漏进设置/误发真实请求。需要模型层行为的用例直接 monkeypatch
+# app.intent.service.classify_small / classify_fallback。
+os.environ.setdefault("DEEPSEEK_API_KEY", "")
+os.environ.setdefault("SMALL_MODEL_NAME", "")
+os.environ.setdefault("SMALL_MODEL_API_KEY", "")
+os.environ.setdefault("SMALL_MODEL_BASE_URL", "")
+os.environ.setdefault("INTENT_ENABLED", "true")
+# 008 链路埋点：后台 flush 在测试中彻底关掉（规避 SQLite StaticPool 单连接并发 +
+# 被 drop 表写入），控制台打印与保留期清理关闭；断言落库用 `trace_flush(db)` fixture
+# 显式 flush（见 research.md §3）。
+os.environ.setdefault("TRACE_FLUSH_ENABLED", "false")
+os.environ.setdefault("TRACE_CONSOLE_LOG", "false")
+os.environ.setdefault("TRACE_RETENTION_DAYS", "0")
 # 002 后台任务已改为 FastAPI BackgroundTasks 进程内执行（免 Celery/Redis）。
 # TestClient 在响应后同步执行 BackgroundTasks，测试无需额外配置。
 
@@ -44,6 +59,44 @@ def _reset_chroma():
     chroma.reset_collection()
     yield
     chroma.reset_collection()
+
+
+@pytest.fixture(autouse=True)
+def _reset_intent_rules():
+    """006 规则引擎与配置为进程内惰性单例，需在用例间重载避免配置状态泄漏。"""
+    from app.intent.config_loader import reload_intent_config
+    from app.intent.rules.engine import reload_rule_engine
+
+    reload_rule_engine()
+    reload_intent_config()
+    yield
+    reload_rule_engine()
+    reload_intent_config()
+
+
+@pytest.fixture(autouse=True)
+def _reset_trace_collector():
+    """008 清空采集器缓冲，避免用例间 trace 泄漏（后台 flush 已关，缓冲仅靠显式 flush）。"""
+    from app.services.tracing.collector import collector
+
+    collector.reset()
+    yield
+    collector.reset()
+
+
+@pytest.fixture()
+def trace_flush(db):
+    """008 把缓冲中 span 显式落库到当前测试库（供 trace 集成测试断言）。
+
+    纪律：先完成业务操作（其内部已 commit）再调 `_flush()`，避免测试会话有未提交
+    写事务时被本调用误提交（StaticPool 单连接共享，research.md §3）。
+    """
+    from app.services.tracing.collector import collector
+
+    def _flush() -> int:
+        return collector.flush(db)
+
+    return _flush
 
 
 class FakeEmbeddingClient:

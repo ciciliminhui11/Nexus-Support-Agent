@@ -17,6 +17,7 @@
 
 - **决策**：采用 sentence-transformers 加载本地 bge-m3 模型，向量维度 1024；Chroma 使用 `cosine` 距离度量；Query 向量化与入库向量化共用同一 `embedding.py` 封装（加载一次模型、进程级复用）。
 - **理由**：宪法要求核心链路可读可控，bge-m3 为本地开源模型、无需外部 API 密钥，符合「本地方案沙箱可运行」；共用封装保证入库与检索向量分布一致。Chroma 使用本地持久化目录，metadata 存增强元数据体系（见 002 research §3）以关联 MySQL 文档并支撑过滤/裁决。
+- **修订（按实测）**：运行默认 `embedding_backend=openai_compat`（SiliconFlow 免费 bge-m3，1024 维与本地/Ollama 同款）——本机未装 Ollama 且内存紧张，本地加载 bge-m3 会 OOM（Ollama 表现为 502）；云端零本地内存。Query 与入库仍共用同一 `embedding.py` 封装，保证向量分布一致。
 - **备选方案**：OpenAI text-embedding-3 → 依赖外部 API 与密钥，违背本地沙箱要求；Milvus/Qdrant → 需额外服务进程，本地沙箱过重，作为生产切换备选。
 
 ## 3. 检索重排序：Reranker 精排（粗筛 → 精排）

@@ -52,21 +52,37 @@ def reset_collection() -> None:
 
 
 def add_chunks(doc_id: int, records: list[dict]) -> None:
-    """records: [{"chunk_index", "text", "snippet", "embedding"}, ...]"""
+    """records: [{"chunk_index", "text", "snippet", "embedding", ...}, ...]
+
+    扩展元数据（T013）：`source_file/section/heading_path/category/version_date/
+    source_priority` 为可选项，缺失/为 None 时跳过，向后兼容 001 检索。
+    """
     if not records:
         return
+    _EXTRA_META = (
+        "source_file",
+        "section",
+        "heading_path",
+        "category",
+        "version_date",
+        "source_priority",
+    )
+    metadatas = []
+    for r in records:
+        meta = {
+            "doc_id": doc_id,
+            "chunk_index": r["chunk_index"],
+            "snippet": r["snippet"],
+        }
+        for k in _EXTRA_META:
+            if r.get(k) is not None:
+                meta[k] = r[k]
+        metadatas.append(meta)
     get_collection().add(
         ids=[f"{doc_id}-{r['chunk_index']}" for r in records],
         embeddings=[r["embedding"] for r in records],
         documents=[r["text"] for r in records],
-        metadatas=[
-            {
-                "doc_id": doc_id,
-                "chunk_index": r["chunk_index"],
-                "snippet": r["snippet"],
-            }
-            for r in records
-        ],
+        metadatas=metadatas,
     )
 
 

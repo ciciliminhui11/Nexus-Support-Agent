@@ -95,8 +95,8 @@ def test_concurrent_delete_marks_task_cancelled(db, tmp_path, monkeypatch):
 
     real_ingest = pipeline.ingest_chunks
 
-    def deleting_ingest(doc_id, chunks, client, batch_size):
-        real_ingest(doc_id, chunks, client, batch_size)
+    def deleting_ingest(doc_id, chunks, client, batch_size, **kwargs):
+        real_ingest(doc_id, chunks, client, batch_size, **kwargs)
         # 模拟并发：向量刚写完，元数据已被删除
         with SessionLocal() as s:
             d = s.get(KnowledgeDoc, doc_id)

@@ -75,10 +75,12 @@ IntentResult(
 
 | 配置项 | 位置 | 默认值 | 说明 |
 |---|---|---|---|
-| `DEEPSEEK_API_KEY` | .env | 用户填写 | 模型密钥（占位，不提交仓库） |
-| `DEEPSEEK_BASE_URL` | .env | 用户填写 | OpenAI 兼容 base_url |
-| `DEEPSEEK_SMALL_MODEL` | .env | `DeepSeek-R1-0528-Qwen3-8B` | 小模型名 |
-| `DEEPSEEK_LARGE_MODEL` | .env | 用户填写 | 兜底大模型名 |
+| `DEEPSEEK_API_KEY` | .env | 用户填写 | 兜底层模型密钥（占位，不提交仓库） |
+| `DEEPSEEK_BASE_URL` | .env | 用户填写 | 兜底层 OpenAI 兼容 base_url |
+| `SMALL_MODEL_NAME` | .env | 用户填写 | 小模型层模型名（独立厂商/端点） |
+| `SMALL_MODEL_API_KEY` | .env | 用户填写 | 小模型层密钥（不复用 DeepSeek 凭据） |
+| `SMALL_MODEL_BASE_URL` | .env | 用户填写 | 小模型层 OpenAI 兼容 base_url |
+| `DEEPSEEK_LARGE_MODEL` | .env | 用户填写 | 兜底大模型名（空则回退对话模型） |
 | `intent_high_threshold` | system_config | 0.9 | 高阈值 |
 | `intent_low_threshold` | system_config | 0.6 | 低阈值 |
 | `intent_clarify_retry` | system_config | 1 | 澄清重试次数 |

@@ -96,3 +96,86 @@ def test_make_snippet_truncates_with_ellipsis():
 
 def test_make_snippet_compacts_whitespace():
     assert splitter.make_snippet("简短") == "简短"
+
+
+# ---------- split_document：markdown 标题切分 / txt 语义断点（T012/T018） ----------
+
+def test_markdown_splits_by_heading_levels():
+    text = (
+        "# 常见问题\n\n开头内容\n\n"
+        "## 退换货\n\n退货政策说明\n\n"
+        "### 退货时限\n\n七天内可退"
+    )
+    chunks = splitter.split_document("faq.md", text, chunk_size=500, chunk_overlap=80)
+    assert [c.section for c in chunks] == ["常见问题", "退换货", "退货时限"]
+    assert [c.heading_path for c in chunks] == [
+        "常见问题",
+        "常见问题 > 退换货",
+        "常见问题 > 退换货 > 退货时限",
+    ]
+    assert "退货政策说明" in chunks[1].text
+
+
+def test_markdown_without_heading_falls_back_to_plain():
+    chunks = splitter.split_document("a.md", "第一段\n\n第二段", 500, 80)
+    assert len(chunks) == 1
+    assert chunks[0].section is None
+    assert chunks[0].heading_path is None
+    assert "第一段" in chunks[0].text and "第二段" in chunks[0].text
+
+
+def test_markdown_oversized_section_fixed_length_fallback():
+    long_body = "详" * 1200
+    chunks = splitter.split_document("big.md", f"# 大章节\n\n{long_body}", 500, 80)
+    assert len(chunks) == 3  # 1200 字 → 500/500/200
+    assert all(c.section == "大章节" for c in chunks)
+    assert all(c.heading_path == "大章节" for c in chunks)
+    assert sum(len(c.text) for c in chunks) == 1200
+
+
+def test_markdown_table_converted_to_natural_language():
+    text = (
+        "# 价格表\n\n"
+        "| 产品 | 价格 |\n"
+        "| --- | --- |\n"
+        "| 标准版 | 99 |\n"
+        "| 高级版 | 199 |\n"
+    )
+    chunks = splitter.split_document("price.md", text, 500, 80)
+    assert len(chunks) == 1
+    joined = chunks[0].text
+    assert "产品：标准版" in joined and "价格：99" in joined
+    assert "产品：高级版" in joined and "价格：199" in joined
+
+
+def test_txt_without_client_keeps_coarse_split():
+    # 无 embedding client → 按大小合并，不做语义断点
+    text = "退货 order1 需要\n\n系统 order2 维护"
+    chunks = splitter.split_document("a.txt", text, 500, 80)
+    assert len(chunks) == 1
+
+
+def test_txt_semantic_breakpoints_split_low_similarity(fake_embedding):
+    # 三段关键词互不重叠 → 相邻段余弦相似度≈0 < 阈值 → 断点全开
+    text = "退货 order1 需要\n\n系统 order2 维护\n\n网络 order3 故障"
+    chunks = splitter.split_document(
+        "a.txt", text, 500, 80, embed_client=fake_embedding
+    )
+    assert len(chunks) == 3
+
+
+def test_txt_semantic_breakpoints_keep_similar(fake_embedding):
+    # 两段共享「退货/order1」→ 相似度 > 阈值 → 合并为一块
+    text = "退货 order1 需要\n\n退货 order1 请提供"
+    chunks = splitter.split_document(
+        "a.txt", text, 500, 80, embed_client=fake_embedding
+    )
+    assert len(chunks) == 1
+
+
+def test_txt_semantic_split_keeps_sections_none(fake_embedding):
+    chunks = splitter.split_document(
+        "a.txt", "退货 order1 需要\n\n系统 order2 维护", 500, 80,
+        embed_client=fake_embedding,
+    )
+    assert all(c.section is None and c.heading_path is None for c in chunks)

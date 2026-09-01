@@ -1,6 +1,9 @@
-"""Embedding 批次有限重试：瞬时网络失败后重试成功 / 重试耗尽上抛（FR-011 增强）。"""
+"""Embedding 批次有限重试 + openai_compat 后端 HTTP 行为（FR-011 增强）。"""
 from __future__ import annotations
 
+import json
+
+import httpx
 import pytest
 
 from app.core.exceptions import LLMError
@@ -54,3 +57,74 @@ def test_retry_only_on_llm_error(monkeypatch):
 
     with pytest.raises(ValueError):
         embedding.embed_texts(_Boom(), ["a"], batch_size=1)
+
+
+# ---------- openai_compat 后端（OpenAI 兼容 /embeddings，如 SiliconFlow） ----------
+
+def _make_client(transport: httpx.MockTransport, api_key: str = "test-key"):
+    return embedding.OpenAIBackendEmbeddingClient(
+        "https://api.siliconflow.cn/v1",
+        "BAAI/bge-m3",
+        api_key,
+        transport=transport,
+    )
+
+
+def _embed_ok(items):
+    return httpx.Response(
+        200,
+        json={"object": "list", "data": items, "model": "BAAI/bge-m3"},
+    )
+
+
+def test_openai_compat_embed_parses_and_orders_by_index():
+    """请求形态正确，且响应 data 按 index 排序还原入参顺序。"""
+    def handler(request):
+        assert request.url.path == "/v1/embeddings"
+        assert request.headers["authorization"] == "Bearer test-key"
+        body = json.loads(request.content)
+        assert body["model"] == "BAAI/bge-m3"
+        assert body["input"] == ["a", "b"]
+        return _embed_ok([
+            {"object": "embedding", "index": 1, "embedding": [1.0, 0.0]},
+            {"object": "embedding", "index": 0, "embedding": [0.0, 1.0]},
+        ])
+
+    vecs = _make_client(httpx.MockTransport(handler)).embed(["a", "b"])
+
+    assert vecs == [[0.0, 1.0], [1.0, 0.0]]
+
+
+def test_openai_compat_missing_key_raises_clear_error():
+    with pytest.raises(LLMError, match="EMBEDDING_API_KEY"):
+        _make_client(
+            httpx.MockTransport(lambda r: httpx.Response(200)), api_key=""
+        ).embed(["a"])
+
+
+def test_openai_compat_http_error_wrapped_as_llm_error():
+    def handler(request):
+        return httpx.Response(502, json={"error": "bad gateway"})
+
+    with pytest.raises(LLMError, match="Embedding 服务不可用"):
+        _make_client(httpx.MockTransport(handler)).embed(["a"])
+
+
+def test_openai_compat_transient_failure_retried_by_embed_texts(monkeypatch):
+    """经 embed_texts 走有限重试：首次 502 → 重试成功。"""
+    monkeypatch.setattr(embedding.settings, "embedding_retry_times", 2)
+    monkeypatch.setattr(embedding.settings, "embedding_retry_backoff_seconds", 0.0)
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(502, json={"error": "bad gateway"})
+        return _embed_ok(
+            [{"object": "embedding", "index": 0, "embedding": [0.5, 0.5]}]
+        )
+
+    client = _make_client(httpx.MockTransport(handler))
+
+    assert embedding.embed_texts(client, ["a"], batch_size=1) == [[0.5, 0.5]]
+    assert calls["n"] == 2
