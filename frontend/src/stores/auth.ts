@@ -5,7 +5,17 @@
 import { create } from "zustand";
 import http from "@/api/http";
 import { clearToken, getToken, setToken } from "@/api/authTokenStore";
+import { resetSessionStore } from "@/stores/session";
 import type { AccountType, Quota, User } from "@/types";
+
+/**
+ * 跨模块注入的 QueryClient 清理回调。
+ * 由 App.tsx 在挂载时调用 setQueryClientClear() 注册，避免 store 直接依赖 React 组件实例。
+ */
+let queryClientClearFn: (() => void) | null = null;
+export function setQueryClientClear(fn: () => void) {
+  queryClientClearFn = fn;
+}
 
 type AuthStatus = "unauthenticated" | "loading" | "authenticated";
 
@@ -71,6 +81,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: () => {
     clearToken();
     set({ user: null, quota: null, status: "unauthenticated" });
+    // 清 TanStack Query 缓存，避免下一个账号看到残留的会话/消息/配额
+    queryClientClearFn?.();
+    // 重置会话 UI 态（activeSessionId / draft）
+    resetSessionStore();
   },
 
   fetchMe: async () => {
@@ -90,5 +104,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   apply401: () => {
     clearToken();
     set({ user: null, quota: null, status: "unauthenticated" });
+    // 同步清缓存，与 logout 保持一致（http.ts 的 401 会全页刷新，
+    // 但 SSE/流式场景走 apply401 时仍在同一页面生命周期内）
+    queryClientClearFn?.();
+    resetSessionStore();
   },
 }));

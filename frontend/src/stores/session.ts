@@ -17,3 +17,8 @@ export const useSessionStore = create<SessionState>((set) => ({
   setActiveSessionId: (id) => set({ activeSessionId: id }),
   setDraft: (text) => set({ draft: text }),
 }));
+
+/** 退出登录时重置会话 UI 态，防止下一个账号看到残留数据。 */
+export function resetSessionStore() {
+  useSessionStore.setState({ activeSessionId: null, draft: "" });
+}

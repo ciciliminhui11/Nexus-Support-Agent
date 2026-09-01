@@ -11,7 +11,7 @@ import zhCN from "antd/locale/zh_CN";
 import { router } from "@/router";
 import { themeConfig } from "@/styles/theme";
 import { getToken } from "@/api/authTokenStore";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore, setQueryClientClear } from "@/stores/auth";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,6 +24,11 @@ const queryClient = new QueryClient({
 
 export default function App() {
   const fetchMe = useAuthStore((s) => s.fetchMe);
+
+  // 注册 QueryClient 清理回调，供 auth store 的 logout / apply401 调用
+  useEffect(() => {
+    setQueryClientClear(() => queryClient.clear());
+  }, []);
 
   useEffect(() => {
     if (getToken()) {
