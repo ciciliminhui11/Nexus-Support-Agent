@@ -33,9 +33,10 @@ class LLMConnectionError(Exception):
 
 
 def _http_error_to_exc(exc: httpx.HTTPError) -> Exception:
+    detail = str(exc)
     if isinstance(exc, httpx.TimeoutException):
-        return LLMTimeoutError(message=exc)  # type: ignore[arg-type]
-    return LLMConnectionError(message=exc)  # type: ignore[arg-type]
+        return LLMTimeoutError(detail)
+    return LLMConnectionError(detail)
 
 
 async def stream_chat(messages: list[dict]) -> AsyncGenerator[str, None]:
@@ -78,10 +79,10 @@ async def _stream_ollama(messages: list[dict]) -> AsyncGenerator[str, None]:
 
 
 async def _stream_deepseek(messages: list[dict]) -> AsyncGenerator[str, None]:
-    base = settings.deepseek_base_url.rstrip("/") or "https://api.deepseek.com"
+    base = settings.llm_base_url.rstrip("/") or "https://api.deepseek.com"
     url = f"{base}/chat/completions"
     payload = {
-        "model": settings.deepseek_chat_model,
+        "model": settings.llm_model,
         "messages": messages,
         "stream": True,
     }
@@ -95,7 +96,13 @@ async def _stream_deepseek(messages: list[dict]) -> AsyncGenerator[str, None]:
             async with client.stream("POST", url, json=payload, headers=headers) as resp:
                 if resp.status_code == 429:
                     raise LLMRateLimitError()
-                resp.raise_for_status()
+                if resp.status_code >= 400:
+                    # 读取响应体以获取详细错误信息
+                    body = await resp.aread()
+                    from app.core.logging import get_logger
+                    logger = get_logger(__name__)
+                    logger.error("LLM 请求失败 status=%s body=%s", resp.status_code, body.decode(errors="replace"))
+                    resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     if not line or not line.startswith("data:"):
                         continue

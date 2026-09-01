@@ -1,7 +1,6 @@
 """大模型兜底分类（FR-010）：Few-shot + 强制 JSON，任何失败返回 None。
 
-模型名取 `deepseek_large_model`，为空时回退 `deepseek_chat_model`（保证
-未配置兜底模型也能用对话模型工作）。
+模型名与 base_url 统一使用 `llm_model` / `llm_base_url`（与 001 对话 LLM 共用）。
 """
 from __future__ import annotations
 
@@ -33,7 +32,7 @@ def classify_fallback(
 ) -> tuple[IntentCategory, float] | None:
     """大模型兜底分类；任何异常/解析失败返回 None（调用方降级 unknown）。"""
     try:
-        model = settings.deepseek_large_model or settings.deepseek_chat_model
+        model = settings.llm_model
         messages = [
             {"role": "system", "content": FALLBACK_SYSTEM_PROMPT},
             {"role": "user", "content": query},

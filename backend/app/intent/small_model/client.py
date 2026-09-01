@@ -87,10 +87,10 @@ def post_chat_completion(
     key = api_key if api_key is not None else settings.deepseek_api_key
     if not key:
         raise LLMConnectionError("LLM API Key 未配置")
-    base = (base_url or settings.deepseek_base_url).rstrip("/") or "https://api.deepseek.com"
+    base = (base_url or settings.llm_base_url).rstrip("/") or "https://api.deepseek.com"
     url = f"{base}/chat/completions"
     payload = {
-        "model": model or settings.deepseek_chat_model,
+        "model": model or settings.llm_model,
         "messages": messages,
         "response_format": {"type": "json_object"},
         "stream": False,

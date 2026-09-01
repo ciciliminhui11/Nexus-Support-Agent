@@ -92,7 +92,11 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""
     embedding_api_model: str = "BAAI/bge-m3"
     llm_backend: str = "deepseek"  # deepseek(OpenAI 兼容 API) | ollama(本地)
-    deepseek_chat_model: str = "deepseek-v4-flash"  # 001 对话 LLM 模型（DeepSeek OpenAI 兼容）
+    # LLM 统一配置（001 对话 + 006 意图兜底共用）
+    llm_model: str = "deepseek-v4-flash"
+    llm_base_url: str = "https://api.deepseek.com"
+    # 以下为遗留/特殊用途配置
+    deepseek_chat_model: str = "deepseek-chat"  # 001 对话 LLM 模型（DeepSeek OpenAI 兼容）
     ollama_base_url: str = "http://localhost:11434"
     ollama_embed_model: str = "bge-m3"
     ollama_chat_model: str = "qwen2"
