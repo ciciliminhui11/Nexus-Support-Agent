@@ -1,14 +1,16 @@
-"""反馈接口：提交/覆盖更新 + 按消息查询（均需鉴权）。"""
+"""反馈接口：提交/覆盖更新 + 按消息查询（均需鉴权）+ 管理端反馈列表。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_admin
 from app.db.models import Feedback, User
 from app.db.session import get_db
 from app.schemas.feedback import (
     FeedbackItem,
+    FeedbackListItem,
+    FeedbackListResponse,
     FeedbackQueryResponse,
     FeedbackSubmitRequest,
     FeedbackSubmitResponse,
@@ -68,3 +70,46 @@ def get_feedback(
         ),
         all=[_to_item(f) for f in items],
     )
+
+
+@router.get("/admin/feedback/list", response_model=FeedbackListResponse)
+def list_all_feedback(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    feedback_type: str | None = Query(None),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> FeedbackListResponse:
+    """管理端反馈列表（需管理员权限）。"""
+    from app.db.models import Message
+
+    query = db.query(Feedback).join(Message, Feedback.message_id == Message.id)
+
+    if feedback_type:
+        query = query.filter(Feedback.feedback_type == feedback_type)
+
+    total = query.count()
+    rows = (
+        query.add_columns(Message.content)
+        .order_by(Feedback.update_time.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    items: list[FeedbackListItem] = []
+    for f, content in rows:
+        summary = content[:100] + ("..." if len(content) > 100 else "")
+        items.append(
+            FeedbackListItem(
+                feedback_id=f.id,
+                message_id=f.message_id,
+                user_id=f.user_id,
+                feedback_type=f.feedback_type,
+                feedback_text=f.feedback_text,
+                message_content=summary,
+                updated_at=f.update_time,
+            )
+        )
+
+    return FeedbackListResponse(total=total, items=items)

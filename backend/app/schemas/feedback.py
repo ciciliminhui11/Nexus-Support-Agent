@@ -44,3 +44,22 @@ class FeedbackQueryResponse(BaseModel):
     message_id: int
     mine: MineFeedback | None
     all: list[FeedbackItem]
+
+
+class FeedbackListItem(BaseModel):
+    """管理端反馈列表项（含消息内容摘要）。"""
+
+    feedback_id: int
+    message_id: int
+    user_id: int
+    feedback_type: str
+    feedback_text: str | None
+    message_content: str  # 消息内容摘要（前100字）
+    updated_at: datetime
+
+
+class FeedbackListResponse(BaseModel):
+    """管理端反馈列表响应。"""
+
+    total: int
+    items: list[FeedbackListItem]

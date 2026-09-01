@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
 from app.api import (
+    admin,
     auth,
     chat,
     feedback,
@@ -22,7 +23,7 @@ from app.config import settings
 from app.core.exceptions import BizError
 from app.core.logging import get_logger, setup_logging
 from app.db.models import User
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, create_all
 
 logger = get_logger(__name__)
 
@@ -118,6 +119,7 @@ async def _runtime_zombie_sweeper_task(stop: asyncio.Event) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    create_all()  # 启动时自动建表（含 trace_event 等 008 埋点表）
     seed_admin()
     warmup_reranker()
     sweep_zombie_tasks()
@@ -188,3 +190,4 @@ app.include_router(chat.router)
 app.include_router(feedback.router)
 app.include_router(intent_debug.router)
 app.include_router(trace_api.router)
+app.include_router(admin.router)
