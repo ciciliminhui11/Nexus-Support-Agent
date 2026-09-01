@@ -52,6 +52,17 @@ export interface FeedbackItem {
   updated_at: string;
 }
 
+/** 管理端反馈列表项 */
+export interface FeedbackListItem {
+  feedback_id: number;
+  message_id: number;
+  user_id: number;
+  feedback_type: "like" | "dislike";
+  feedback_text: string | null;
+  message_content: string;
+  updated_at: string;
+}
+
 /** 当前用户视角的反馈（mine 为 null 表示该用户尚未反馈） */
 export interface MineFeedback {
   feedback_type: "like" | "dislike";
@@ -102,4 +113,38 @@ export interface ChatRequest {
 export interface ApiErrorBody {
   code: string;
   message: string;
+}
+
+/** 管理端用户额度列表项 */
+export interface UserQuotaItem {
+  user_id: number;
+  account_identifier: string;
+  account_type: AccountType;
+  role: UserRole;
+  daily_quota: number | null;
+  used_today: number;
+  effective_limit: number;
+}
+
+/** 管理端用户额度列表响应 */
+export interface UserQuotaListResponse {
+  total: number;
+  items: UserQuotaItem[];
+}
+
+/** 设置用户额度请求 */
+export interface SetUserQuotaRequest {
+  daily_quota: number | null;
+}
+
+/** 设置用户额度响应 */
+export interface SetUserQuotaResponse {
+  user_id: number;
+  daily_quota: number | null;
+  effective_limit: number;
+}
+
+/** 全局额度响应 */
+export interface GlobalQuotaResponse {
+  daily_quota_limit: number;
 }

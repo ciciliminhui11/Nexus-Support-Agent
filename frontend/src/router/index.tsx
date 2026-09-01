@@ -13,6 +13,8 @@ import RegisterPage from "@/pages/login/RegisterPage";
 import ChatPage from "@/pages/chat/ChatPage";
 import AdminLayout from "@/pages/admin/AdminLayout";
 import KnowledgePage from "@/pages/admin/KnowledgePage";
+import FeedbackPage from "@/pages/admin/FeedbackPage";
+import QuotaPage from "@/pages/admin/QuotaPage";
 import { useAuthStore } from "@/stores/auth";
 
 function FullPageLoading() {
@@ -97,6 +99,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/admin/knowledge" replace /> },
       { path: "knowledge", element: <KnowledgePage /> },
+      { path: "feedback", element: <FeedbackPage /> },
+      { path: "quota", element: <QuotaPage /> },
     ],
   },
   { path: "*", element: <NotFound /> },

@@ -1,15 +1,16 @@
 /**
- * 管理端布局（US5）：左侧导航（知识库管理 / 返回问答）+ 内容区（Outlet 子路由）。
+ * 管理端布局（US5）：左侧导航（知识库管理 / 反馈管理 / 额度管理 / 返回问答）+ 内容区（Outlet 子路由）。
  */
 import { Layout, Menu } from "antd";
-import { DatabaseOutlined, MessageOutlined } from "@ant-design/icons";
-import { Outlet, useNavigate } from "react-router-dom";
+import { DatabaseOutlined, MessageOutlined, CommentOutlined, SafetyOutlined } from "@ant-design/icons";
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
 
 export default function AdminLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // 当前仅知识库一个管理子页，直接高亮对应菜单项
-  const selectedKey = "/admin/knowledge";
+  // 根据当前路径高亮对应菜单项
+  const selectedKey = location.pathname;
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -22,6 +23,8 @@ export default function AdminLayout() {
           selectedKeys={[selectedKey]}
           items={[
             { key: "/admin/knowledge", icon: <DatabaseOutlined />, label: "知识库管理" },
+            { key: "/admin/feedback", icon: <CommentOutlined />, label: "反馈管理" },
+            { key: "/admin/quota", icon: <SafetyOutlined />, label: "额度管理" },
             { key: "/chat", icon: <MessageOutlined />, label: "返回问答" },
           ]}
           onClick={({ key }) => navigate(key)}

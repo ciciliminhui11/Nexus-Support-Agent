@@ -18,6 +18,11 @@ import type {
   Quota,
   Session,
   User,
+  UserQuotaItem,
+  UserQuotaListResponse,
+  SetUserQuotaRequest,
+  SetUserQuotaResponse,
+  GlobalQuotaResponse,
 } from "@/types";
 
 // ---------- key 约定 ----------
@@ -222,4 +227,65 @@ export function useFeedbackMutation() {
 // ---------- 登录态辅助 ----------
 export function useIsAuthenticated(): boolean {
   return useAuthStore((s) => s.status === "authenticated");
+}
+
+// ---------- 管理员额度管理 ----------
+export function useUserQuotaList(page = 1, pageSize = 20) {
+  return useQuery<UserQuotaListResponse>({
+    queryKey: ["admin-users-quota", page],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("page_size", String(pageSize));
+      const { data } = await http.get<UserQuotaListResponse>(
+        `/api/admin/users?${params.toString()}`
+      );
+      return data;
+    },
+    staleTime: 10_000,
+  });
+}
+
+export function useSetUserQuota() {
+  const qc = useQueryClient();
+  return useMutation<SetUserQuotaResponse, unknown, SetUserQuotaRequest & { userId: number }>({
+    mutationFn: async ({ userId, daily_quota }) => {
+      const { data } = await http.put<SetUserQuotaResponse>(
+        `/api/admin/users/${userId}/quota`,
+        { daily_quota }
+      );
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-users-quota"] });
+    },
+  });
+}
+
+export function useGlobalQuota() {
+  return useQuery<GlobalQuotaResponse>({
+    queryKey: ["admin-global-quota"],
+    queryFn: async () => {
+      const { data } = await http.get<GlobalQuotaResponse>("/api/admin/quota/global");
+      return data;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useSetGlobalQuota() {
+  const qc = useQueryClient();
+  return useMutation<GlobalQuotaResponse, unknown, GlobalQuotaResponse>({
+    mutationFn: async (data) => {
+      const { data: res } = await http.put<GlobalQuotaResponse>(
+        "/api/admin/quota/global",
+        data
+      );
+      return res;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-global-quota"] });
+      qc.invalidateQueries({ queryKey: ["admin-users-quota"] });
+    },
+  });
 }
