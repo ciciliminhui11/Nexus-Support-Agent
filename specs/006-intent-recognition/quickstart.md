@@ -7,7 +7,7 @@
 ## 前置条件
 
 - 后端已启动：`uvicorn app.main:app --host 0.0.0.0 --port 8000`
-- 已配置 `.env`：将 `.env.example` 复制为 `.env` 并填写 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_LARGE_MODEL`（小模型名默认 `DeepSeek-R1-0528-Qwen3-8B`）；**未填密钥时验证降级路径**
+- 已配置 `.env`：将 `.env.example` 复制为 `.env` 并填写 `DEEPSEEK_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`（小模型名默认 `DeepSeek-R1-0528-Qwen3-8B`）；**未填密钥时验证降级路径**
 - 内置默认词库/句式模板/负样本库已加载（`intent_keywords.yaml` 等）
 - 具备管理员角色的 JWT（注册/登录由 003 特性提供）
 

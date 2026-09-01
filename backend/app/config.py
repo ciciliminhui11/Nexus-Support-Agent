@@ -78,11 +78,10 @@ class Settings(BaseSettings):
     intent_clarify_retry: int = 1
     intent_reverse_calibrate: bool = True
     intent_model_self_check: bool = False
-    # DeepSeek API 密钥/Base URL 为 001 对话与 006 兜底层共用（同一厂商）。模型分开：
-    # 001 对话用 deepseek_chat_model；006 兜底层用 deepseek_large_model（空则回退对话模型）；
+    # DeepSeek API 密钥为 001 对话与 006 意图兜底共用（同一厂商）。
+    # 模型与 base_url 统一使用下方 LLM 配置（llm_model / llm_base_url），不再单独设置。
     # 006 小模型层用独立 SMALL_MODEL_*（可不同厂商/端点，不复用 DeepSeek 凭据）。
     deepseek_api_key: str = ""  # .env 占位，用户填写
-    deepseek_base_url: str = "https://api.deepseek.com"
 
     # ---------- 向量库 / Embedding / LLM ----------
     chroma_dir: str = "./chroma_data"  # Chroma 本地文件模式目录
@@ -95,8 +94,6 @@ class Settings(BaseSettings):
     # LLM 统一配置（001 对话 + 006 意图兜底共用）
     llm_model: str = "deepseek-v4-flash"
     llm_base_url: str = "https://api.deepseek.com"
-    # 以下为遗留/特殊用途配置
-    deepseek_chat_model: str = "deepseek-chat"  # 001 对话 LLM 模型（DeepSeek OpenAI 兼容）
     ollama_base_url: str = "http://localhost:11434"
     ollama_embed_model: str = "bge-m3"
     ollama_chat_model: str = "qwen2"
@@ -105,8 +102,7 @@ class Settings(BaseSettings):
     small_model_name: str = ""
     small_model_api_key: str = ""
     small_model_base_url: str = ""
-    # 006 大模型兜底层（默认不启用 intent_model_self_check；空则回退 deepseek_chat_model）
-    deepseek_large_model: str = ""
+    # 006 大模型兜底层复用上方 llm_model / llm_base_url / deepseek_api_key
     # 006 补充配置：总开关 / 规则配置路径 / 模型调用参数 / 模板话术
     intent_enabled: bool = True  # 意图识别总开关（关闭时识别结果恒为 unknown）
     intent_keywords_path: str = "./config/intent_keywords.yaml"
