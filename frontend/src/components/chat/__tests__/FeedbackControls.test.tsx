@@ -17,7 +17,7 @@ vi.mock("@/api/queries", () => ({
 
 const mockUseFeedbackQuery = useFeedbackQuery as Mock;
 
-function mockQuery(mine: { feedback_type: "like" | "dislike" } | null) {
+function mockQuery(mine: { feedback_type: "like" | "dislike"; feedback_text?: string | null } | null) {
   mockUseFeedbackQuery.mockReturnValue({
     data: { message_id: 42, mine, all: [] },
     isLoading: false,
@@ -42,13 +42,20 @@ describe("FeedbackControls", () => {
     });
   });
 
-  it("点踩展开文字说明，提交时带上反馈文字", () => {
+  it("点踩立即进入编辑模式（先提交类型），填入文字后二次提交带文字", () => {
     mockQuery(null);
     render(<FeedbackControls messageId={42} />);
+    // 第一次点击：提交 dislike 类型，展开文字区
     fireEvent.click(screen.getByLabelText("点踩"));
+    expect(mockMutation.mutate).toHaveBeenCalledTimes(1);
+    expect(mockMutation.mutate).toHaveBeenCalledWith({
+      messageId: 42,
+      feedback_type: "dislike",
+      feedback_text: null,
+    });
     const textarea = screen.getByLabelText("反馈说明");
     fireEvent.change(textarea, { target: { value: "回答不准确" } });
-    // AntD 按钮两汉字间自动加空格（提 交），用容忍空白的正则匹配
+    // 第二次提交：带上文字
     fireEvent.click(screen.getByRole("button", { name: /提\s*交/ }));
     expect(mockMutation.mutate).toHaveBeenCalledWith({
       messageId: 42,
@@ -61,16 +68,35 @@ describe("FeedbackControls", () => {
     mockQuery(null);
     render(<FeedbackControls messageId={42} />);
     fireEvent.click(screen.getByLabelText("点踩"));
+    mockMutation.isPending = false; // 模拟第一次类型提交完成
+    expect(mockMutation.mutate).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /取\s*消/ }));
-    expect(mockMutation.mutate).not.toHaveBeenCalled();
+    // 取消不应触发第二次提交
+    expect(mockMutation.mutate).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText("反馈说明")).not.toBeInTheDocument();
   });
 
-  it("已反馈 dislike 时再点踩不重复提交，可切换为 like", () => {
-    mockQuery({ feedback_type: "dislike" });
+  it("已反馈 dislike 时再点踩展开编辑区并回填已有文字", () => {
+    mockQuery({ feedback_type: "dislike", feedback_text: "不够详细" });
     render(<FeedbackControls messageId={42} />);
     fireEvent.click(screen.getByLabelText("点踩"));
+    // 已为 dislike，不再重复提交类型，直接进入编辑模式
     expect(mockMutation.mutate).not.toHaveBeenCalled();
+    // 文字区应回填已有说明
+    const textarea = screen.getByLabelText("反馈说明");
+    expect(textarea).toHaveValue("不够详细");
+    fireEvent.change(textarea, { target: { value: "回答不完整" } });
+    fireEvent.click(screen.getByRole("button", { name: /提\s*交/ }));
+    expect(mockMutation.mutate).toHaveBeenCalledWith({
+      messageId: 42,
+      feedback_type: "dislike",
+      feedback_text: "回答不完整",
+    });
+  });
+
+  it("已反馈 dislike 时可切换为 like", () => {
+    mockQuery({ feedback_type: "dislike" });
+    render(<FeedbackControls messageId={42} />);
     fireEvent.click(screen.getByLabelText("点赞"));
     expect(mockMutation.mutate).toHaveBeenCalledWith({
       messageId: 42,
