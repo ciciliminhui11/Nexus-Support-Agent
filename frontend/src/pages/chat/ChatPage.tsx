@@ -5,7 +5,7 @@
  * - 输入区：500 字计数、Enter 发送 / Shift+Enter 换行、配额耗尽禁用
  * - 新会话欢迎态：示例问题引导
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   App as AntApp,
@@ -100,11 +100,20 @@ export default function ChatPage() {
     }
   }, [sessions, activeSessionId, setActiveSessionId]);
 
-  // 历史回读 → 播种本地消息（以 history 为键，切换会话/加载完成后各触发一次）。
-  // 守卫：本地已有消息（刚发送、正在流式）时不覆盖，避免历史空结果清掉进行中的回复。
+  // 记录已为哪个 activeSessionId 执行过历史播种，
+  // 避免同一会话内重复覆盖本地正在流式的消息。
+  const seededSessionRef = useRef<number | null>(null);
+
+  // 历史回读 → 播种本地消息。
+  // 仅在切换会话或首次加载时为当前会话播种一次；
+  // 同一会话内如果已有本地消息（如正在流式），不覆盖。
   useEffect(() => {
     if (!history) return;
-    if (messages.length > 0) return;
+    if (activeSessionId === null) return;
+    // 已为本会话播种过，跳过
+    if (seededSessionRef.current === activeSessionId) return;
+
+    seededSessionRef.current = activeSessionId;
     setMessages(
       history.items.map((m: Message): UiMessage => ({
         key: `h-${m.message_id}`,
@@ -117,7 +126,7 @@ export default function ChatPage() {
         errorText: null,
       })),
     );
-  }, [history, messages.length]);
+  }, [history, activeSessionId]);
 
   // 新建会话
   const handleNewSession = async () => {
@@ -126,6 +135,7 @@ export default function ChatPage() {
       const created = await createSession.mutateAsync();
       setActiveSessionId(created.session_id);
       setMessages([]);
+      seededSessionRef.current = null;
       setDraft("");
       setDrawerOpen(false);
     } catch {
@@ -149,6 +159,9 @@ export default function ChatPage() {
         const created = await createSession.mutateAsync();
         sid = created.session_id;
         setActiveSessionId(sid);
+        // 新会话无历史可播种，直接标记已播种，
+        // 避免 useMessages 首次返回空结果时清掉本地占位消息。
+        seededSessionRef.current = sid;
       } catch {
         message.error("创建会话失败，请稍后重试");
         return;
@@ -199,10 +212,15 @@ export default function ChatPage() {
           );
         }
       },
-      onDone: () => {
-        // 生成完成：回读历史以拿到持久化的 message_id、刷新会话标题与配额
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.messages(sid) });
+      onDone: (messageId) => {
+        // 生成完成：更新本地消息的 messageId，并刷新会话标题与配额
+        setMessages((prev) =>
+          prev.map((m) => (m.key === aiKey ? { ...m, messageId } : m)),
+        );
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sessions(1) });
+        if (activeSessionId) {
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.messages(activeSessionId) });
+        }
         useAuthStore.getState().fetchMe().catch(() => {});
       },
     });
@@ -225,6 +243,7 @@ export default function ChatPage() {
         if (stream.streaming) return;
         setActiveSessionId(id);
         setMessages([]);
+        seededSessionRef.current = null;
         setDrawerOpen(false);
       }}
       onNewSession={handleNewSession}

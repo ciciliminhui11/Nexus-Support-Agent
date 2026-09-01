@@ -103,6 +103,7 @@ export function useChatStream() {
         } else if (!settled) {
           patch({ state: "error" });
           setState("error");
+          handlers.onErrorEvent?.("llm_error", "回答中断，请稍后重试");
         }
       }
     },
