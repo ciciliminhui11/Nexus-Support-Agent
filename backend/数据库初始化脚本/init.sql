@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     account_type        ENUM('phone','email') NOT NULL COMMENT '账号类型',
     password_hash       VARCHAR(255) NOT NULL COMMENT 'bcrypt 加盐哈希，禁止明文',
     role                ENUM('user','admin') NOT NULL DEFAULT 'user',
+    daily_quota         INT NULL COMMENT '用户自定义每日提问限额，NULL 使用全局默认值',
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_user_identifier (account_identifier)
 ) ENGINE=InnoDB COMMENT='用户表';

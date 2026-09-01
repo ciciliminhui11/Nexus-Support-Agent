@@ -58,6 +58,7 @@ from app.services.tracing.events import (
     truncate_list,
 )
 from app.services.tracing.tracer import Tracer
+from app.services.auth.quota import _get_user_limit
 from app.services.validation import consume_quota, validate_question
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -100,7 +101,7 @@ def chat_stream(
             validate_question(req.question)
             if get_session_for_user(db, req.session_id, user.id) is None:
                 raise ForbiddenError(code="session_forbidden", message="无权访问该会话")
-            limit = int(get_config_value(db, "daily_quota_limit", settings.daily_quota_limit))
+            limit = _get_user_limit(db, user.id)
             consume_quota(db, user.id, limit)  # 校验 + 原子递增，达上限抛 429
             context_turns = int(get_config_value(db, "context_turns", settings.context_turns))
             history = get_recent_turns(db, req.session_id, context_turns)

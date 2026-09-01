@@ -49,6 +49,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(
         Enum("user", "admin", name="user_role"), nullable=False, default="user"
     )
+    daily_quota: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="用户自定义每日提问限额，NULL 使用全局默认值")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
 
 

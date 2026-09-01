@@ -71,3 +71,42 @@ def test_quota_limiting_hits_429(client, db, auth_headers, fake_embedding, monke
     assert resp.json()["code"] == "quota_exceeded"
     # 拒绝的提问不产生新消息，配额保持 1
     assert _quota(client, headers)["used"] == 1
+
+
+def test_per_user_quota_override(client, db, auth_headers, fake_embedding, monkeypatch):
+    """每用户配额覆盖：user.daily_quota 优先于全局设置。"""
+    headers, user = auth_headers()
+    # 全局限制为 100，但用户个人设置为 2
+    monkeypatch.setattr("app.config.settings.daily_quota_limit", 100)
+    user.daily_quota = 2
+    db.commit()
+    sess = create_session(db, user.id)
+
+    # 前两次应该成功
+    _ask(client, headers, sess, "问题一")
+    _ask(client, headers, sess, "问题二")
+    assert _quota(client, headers)["used"] == 2
+    assert _quota(client, headers)["limit"] == 2
+
+    # 第三次应该被拒绝
+    resp = client.post(
+        "/api/chat/stream",
+        json={"session_id": sess.id, "question": "问题三"},
+        headers=headers,
+    )
+    assert resp.status_code == 429
+    assert _quota(client, headers)["used"] == 2
+
+
+def test_user_quota_null_falls_back_to_global(client, db, auth_headers, fake_embedding, monkeypatch):
+    """每用户配额为 NULL 时，回落全局默认值。"""
+    headers, user = auth_headers()
+    monkeypatch.setattr("app.config.settings.daily_quota_limit", 5)
+    user.daily_quota = None  # 使用全局
+    db.commit()
+    sess = create_session(db, user.id)
+
+    _ask(client, headers, sess, "问题一")
+    quota = _quota(client, headers)
+    assert quota["limit"] == 5  # 应该使用全局限制
+    assert quota["used"] == 1

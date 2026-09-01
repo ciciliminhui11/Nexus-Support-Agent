@@ -7,8 +7,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db.models import UserQuotaDaily
+from app.db.models import User, UserQuotaDaily
 from app.services.config_service import get_config_value
+
+
+def _get_user_limit(db: Session, user_id: int) -> int:
+    """获取用户每日提问限额：优先使用用户个人额度，NULL 回落全局默认。"""
+    user = db.get(User, user_id)
+    if user is not None and user.daily_quota is not None:
+        return user.daily_quota
+    return int(get_config_value(db, "daily_quota_limit", settings.daily_quota_limit))
 
 
 def get_quota(db: Session, user_id: int) -> dict:
@@ -20,7 +28,7 @@ def get_quota(db: Session, user_id: int) -> dict:
         )
     )
     used = row.count if row is not None else 0
-    limit = int(get_config_value(db, "daily_quota_limit", settings.daily_quota_limit))
+    limit = _get_user_limit(db, user_id)
     return {
         "limit": limit,
         "used": used,
